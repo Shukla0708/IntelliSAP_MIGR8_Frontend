@@ -105,7 +105,6 @@ export const SIDEBAR_NAV: NavItem[] = [
 
 export const SIDEBAR_FOOTER_NAV: NavItem[] = [
   { label: "Profile", href: "#", icon: "account" },
-  { label: "Settings", href: "#", icon: "settings" },
 ];
 
 export type KpiTone = "default" | "primary" | "error" | "tertiary";

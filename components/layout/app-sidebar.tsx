@@ -187,7 +187,7 @@ function ProjectSwitcher({ onNavigate }: { onNavigate?: () => void }) {
               );
             })
           )}
-          <Link
+          {/* <Link
             href="/projects"
             onClick={() => {
               setOpen(false);
@@ -196,7 +196,7 @@ function ProjectSwitcher({ onNavigate }: { onNavigate?: () => void }) {
             className="mt-1 flex w-full border-t border-outline-variant px-3 py-2 text-xs font-semibold text-primary hover:bg-surface-container-high"
           >
             Manage projects
-          </Link>
+          </Link> */}
         </div>
       ) : null}
     </div>
