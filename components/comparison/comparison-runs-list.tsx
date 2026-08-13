@@ -32,6 +32,9 @@ const statusStyles: Record<
   },
 };
 
+const newButtonClassName =
+  "inline-flex h-11 shrink-0 items-center justify-center gap-2 self-start rounded border border-transparent bg-primary-container px-4 text-base font-semibold leading-7 text-on-primary shadow-ambient transition-colors hover:bg-primary hover:shadow-md sm:self-auto";
+
 export function ComparisonRunsList() {
   const { selectedProject } = useProject();
   const [runs, setRuns] = useState<ComparisonRunListItem[] | null>(null);
@@ -78,14 +81,21 @@ export function ComparisonRunsList() {
             </Link>
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setPickerOpen(true)}
-          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 self-start rounded border border-transparent bg-primary-container px-4 text-base font-semibold leading-7 text-on-primary shadow-ambient transition-colors hover:bg-primary hover:shadow-md sm:self-auto"
-        >
-          <AddIcon className="h-4 w-4" />
-          New Comparison
-        </button>
+        {selectedProject ? (
+          <Link href="/compare/new" className={newButtonClassName}>
+            <AddIcon className="h-4 w-4" />
+            New Comparison
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className={newButtonClassName}
+          >
+            <AddIcon className="h-4 w-4" />
+            New Comparison
+          </button>
+        )}
       </div>
 
       <SectionCard className="overflow-hidden">

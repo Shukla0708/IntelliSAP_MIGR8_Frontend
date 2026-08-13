@@ -373,7 +373,7 @@ await apiClient.post("/api/auth/login", { email, password });
 | Field mapping (`/field-mapping` list, `/field-mapping/new` create, `/field-mapping/[id]` workspace, confirm) | **Live** — `lib/mapping-api.ts` end to end; `/activity/mappings` (cross-project) still mock |
 | Comparison list / setup / review / download (`/api/comparisons/*`) | **Live** — `lib/comparison-api.ts` end to end |
 
-`AppProviders` wraps `AuthProvider` → `ProjectProvider`. Validation uses `useDefaultProject()` which reads the selected project from context. **Browse** can be global; **create** always confirms a project via `ProjectPickerDialog`.
+`AppProviders` wraps `AuthProvider` → `ProjectProvider`. Validation uses `useDefaultProject()` which reads the selected project from context. **Browse** can be global. **Create** from Current project uses the sidebar selection and goes straight to `/validation/new`, `/field-mapping/new`, or `/compare/new`. **Create** from Activity still confirms a project via `ProjectPickerDialog`.
 
 ### Cross-project runs
 
@@ -482,6 +482,10 @@ npm run lint     # ESLint
 
 ## Session Log
 
+### 2026-08-14 — Skip project picker on Current project New
+
+- **New Validation / Field Mapping / Comparison** on Current project lists go straight to the create page when the sidebar already has a project. Activity lists still open `ProjectPickerDialog`.
+
 ### 2026-08-14 — Large-file validation + live comparison
 
 - Validation execute is async: after **Run Validation** the results page polls until `completed`/`failed`. Leaving the app shell still shows an in-app **Results ready — View** banner (`lib/job-tracker.ts`).
@@ -538,7 +542,7 @@ npm run lint     # ESLint
 - Sidebar: **Overview** (Dashboard) + **Activity** (all my validations/comparisons/mappings/reports) + **Current project** tools with inline project switcher.
 - Backend: `GET /api/runs/` lists current user’s validation runs across projects (`project_id` / `project_name`, optional filter).
 - `/activity/validations` live list with Project column, search, project filter; compare/mapping/reports activity pages (mock/stub).
-- `ProjectPickerDialog` gates **New** create flows so work always lands under an explicit project.
+- `ProjectPickerDialog` gates **New** on Activity (cross-project) lists, and on Current project only when no sidebar project is selected. With a project selected, New goes straight to the create page.
 - Dashboard wired to live project + validation aggregates; recent activity feed; View All → `/projects`.
 - Project-scoped lists link to “View all projects’ …” activity hubs.
 
