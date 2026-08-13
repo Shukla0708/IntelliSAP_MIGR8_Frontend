@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { HelpOutlineIcon, MenuIcon, SearchIcon } from "@/components/ui/icons";
+import { HelpOutlineIcon, MenuIcon } from "@/components/ui/icons";
 import { ProfileMenu } from "@/components/layout/profile-menu";
 
 type AppTopbarProps = {
@@ -31,17 +31,7 @@ export function AppTopbar({ onMenuClick, title, leading }: AppTopbarProps) {
           <h2 className="truncate text-lg font-semibold text-primary sm:text-xl sm:leading-7">
             {title}
           </h2>
-        ) : (
-          <div className="relative">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
-            <input
-              type="search"
-              placeholder="Search migrations..."
-              className="w-44 rounded-md border border-outline-variant bg-surface-container-low py-1.5 pr-4 pl-10 text-sm text-on-surface placeholder:text-on-surface-variant focus:ring-2 focus:ring-primary/20 focus:outline-none sm:w-64"
-              defaultValue=""
-            />
-          </div>
-        )}
+        ) : null}
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
