@@ -1,7 +1,7 @@
 "use client";
 
 import type { ChangeEvent, ComponentType } from "react";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DownloadIcon, SchemaIcon, UploadFileIcon } from "@/components/ui/icons";
 import type { SchemaUploadCard } from "@/data/field-mapping";

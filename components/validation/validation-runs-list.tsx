@@ -30,25 +30,36 @@ export function ValidationRunsList() {
   const [loading, setLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  const projectId = project?.id ?? null;
+
   useEffect(() => {
-    if (!project) {
+    if (!projectId) {
       setRuns([]);
       setLoading(false);
       return;
     }
+
+    let cancelled = false;
     setLoading(true);
+
     apiClient
-      .get<RunListItem[]>(`/api/projects/${project.id}/runs`)
-      .then((res) => setRuns(res.data))
-      .catch(() => setRuns([]))
-      .finally(() => setLoading(false));
-  }, [project]);
+      .get<RunListItem[]>(`/api/projects/${projectId}/runs`)
+      .then((res) => {
+        if (!cancelled) setRuns(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setRuns([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   function handleNewValidation() {
-    if (!project) {
-      setPickerOpen(true);
-      return;
-    }
     setPickerOpen(true);
   }
 
