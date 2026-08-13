@@ -14,6 +14,9 @@ import {
 
 type ValidationRulesTableProps = {
   fields: string[];
+  initialRules?: ValidationFieldRule[];
+  /** Bump when a new file is staged to reset rules from defaults */
+  fieldsVersion?: number;
   onRulesChange: (rows: ValidationFieldRule[]) => void;
 };
 
@@ -35,14 +38,38 @@ function buildDefaultRows(fields: string[]): ValidationFieldRule[] {
   }));
 }
 
-export function ValidationRulesTable({ fields, onRulesChange }: ValidationRulesTableProps) {
-  const [rows, setRows] = useState<ValidationFieldRule[]>(() => buildDefaultRows(fields));
+function mergeRulesForFields(
+  fields: string[],
+  initialRules: ValidationFieldRule[] | undefined,
+): ValidationFieldRule[] {
+  if (!initialRules?.length) {
+    return buildDefaultRows(fields);
+  }
+
+  const byName = new Map(initialRules.map((rule) => [rule.fieldName, rule]));
+  return fields.map((name, i) => {
+    const existing = byName.get(name);
+    if (existing) {
+      return { ...existing, id: `field-${i}-${name}` };
+    }
+    return buildDefaultRows([name])[0];
+  });
+}
+
+export function ValidationRulesTable({
+  fields,
+  initialRules,
+  fieldsVersion = 0,
+  onRulesChange,
+}: ValidationRulesTableProps) {
+  const [rows, setRows] = useState<ValidationFieldRule[]>(() =>
+    mergeRulesForFields(fields, initialRules),
+  );
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
 
-  // Rebuild rows whenever a new file is uploaded and real fields come in.
   useEffect(() => {
-    setRows(buildDefaultRows(fields));
-  }, [fields]);
+    setRows(mergeRulesForFields(fields, initialRules));
+  }, [fields, fieldsVersion, initialRules]);
 
   useEffect(() => {
     onRulesChange(rows);

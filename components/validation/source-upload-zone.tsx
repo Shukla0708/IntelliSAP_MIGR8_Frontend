@@ -1,55 +1,50 @@
 "use client";
 
 import { useState, type DragEvent } from "react";
-import apiClient, { getApiErrorMessage } from "@/lib/axios";
+import { getApiErrorMessage } from "@/lib/axios";
+import { parseSourceHeaders } from "@/lib/parse-source-headers";
 
 type SourceUploadZoneProps = {
-  projectId: string;
-  /** Trimmed run name required by POST /api/runs/ */
+  /** Trimmed run name required before staging a file */
   runName: string;
-  onUploaded: (runId: string, fields: string[], fileName: string) => void;
+  /** Saved filename when editing an existing draft */
+  existingFileName?: string | null;
+  onFileSelected: (file: File, fields: string[]) => void;
 };
 
-export function SourceUploadZone({ projectId, runName, onUploaded }: SourceUploadZoneProps) {
+export function SourceUploadZone({
+  runName,
+  existingFileName,
+  onFileSelected,
+}: SourceUploadZoneProps) {
   const [fileName, setFileName] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
 
   const nameReady = runName.trim().length > 0;
+  const displayFileName = fileName ?? existingFileName;
 
   async function applyFile(file: File | undefined) {
     if (!file) return;
 
-    const trimmedName = runName.trim();
-    if (!trimmedName) {
-      setError("Enter a validation run name before uploading.");
+    if (!runName.trim()) {
+      setError("Enter a validation run name before selecting a file.");
       return;
     }
 
     setError(null);
     setFileName(file.name);
-    setUploading(true);
+    setParsing(true);
 
     try {
-      const { data: created } = await apiClient.post<{ run_id: string }>(
-        `/api/runs/?project_id=${projectId}`,
-        { name: trimmedName },
-      );
-
-      const formData = new FormData();
-      formData.append("file", file);
-      const { data: uploaded } = await apiClient.post<{ fields: string[] }>(
-        `/api/runs/${created.run_id}/upload`,
-        formData,
-      );
-
-      onUploaded(created.run_id, uploaded.fields, file.name);
+      const fields = await parseSourceHeaders(file);
+      onFileSelected(file, fields);
     } catch (err) {
-      setError(getApiErrorMessage(err, "Upload failed"));
+      setError(getApiErrorMessage(err, "Could not read column headers from this file."));
       setFileName(null);
     } finally {
-      setUploading(false);
+      setParsing(false);
     }
   }
 
@@ -57,7 +52,7 @@ export function SourceUploadZone({ projectId, runName, onUploaded }: SourceUploa
     event.preventDefault();
     setDragActive(false);
     if (!nameReady) {
-      setError("Enter a validation run name before uploading.");
+      setError("Enter a validation run name before selecting a file.");
       return;
     }
     applyFile(event.dataTransfer.files?.[0]);
@@ -79,32 +74,50 @@ export function SourceUploadZone({ projectId, runName, onUploaded }: SourceUploa
             : "border-outline-variant"
       }`}
     >
+      {existingFileName && !fileName ? (
+        <p className="text-sm text-on-surface-variant">
+          Current file on server:{" "}
+          <span className="font-mono text-on-surface">{existingFileName}</span>
+        </p>
+      ) : null}
+
       <p className="text-sm text-on-surface-variant">
         {nameReady
-          ? "Drag and drop your source Excel/CSV file here, or"
-          : "Enter a unique validation run name above, then upload your source file."}
+          ? existingFileName
+            ? "Select a new file below to replace the saved source file, or"
+            : "Drag and drop your source Excel/CSV file here, or"
+          : "Enter a unique validation run name above, then select your source file."}
       </p>
       <label
         className={`rounded bg-primary-container px-4 py-2 text-sm font-semibold text-on-primary ${
-          nameReady && !uploading
+          nameReady && !parsing
             ? "cursor-pointer hover:bg-primary"
             : "pointer-events-none cursor-not-allowed opacity-50"
         }`}
       >
-        Browse Files
+        {existingFileName ? "Replace File" : "Browse Files"}
         <input
           type="file"
           accept=".xlsx,.xls,.csv"
           className="hidden"
-          disabled={!nameReady || uploading}
+          disabled={!nameReady || parsing}
           onChange={(e) => applyFile(e.target.files?.[0])}
         />
       </label>
 
-      {uploading && <p className="text-xs text-on-surface-variant">Uploading and extracting columns...</p>}
-      {fileName && !uploading && !error && (
-        <p className="font-mono text-xs text-on-surface-variant">{fileName}</p>
+      {parsing && (
+        <p className="text-xs text-on-surface-variant">Reading column headers...</p>
       )}
+      {displayFileName && !parsing && !error ? (
+        <>
+          <p className="font-mono text-xs text-on-surface-variant">{displayFileName}</p>
+          <p className="text-xs text-on-surface-variant">
+            {fileName
+              ? "New file staged locally. Save or run when you are ready."
+              : "Saved on server. Replace the file above or run validation."}
+          </p>
+        </>
+      ) : null}
       {error && <p className="text-xs text-error">{error}</p>}
     </div>
   );
