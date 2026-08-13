@@ -30,6 +30,9 @@ type RunListItem = {
   errors: number;
 };
 
+const newButtonClassName =
+  "inline-flex h-11 shrink-0 items-center justify-center gap-2 self-start rounded border border-transparent bg-primary-container px-4 text-base font-semibold leading-7 text-on-primary shadow-ambient transition-colors hover:bg-primary hover:shadow-md sm:self-auto";
+
 export function ValidationRunsList() {
   const { project, loading: projectLoading } = useDefaultProject();
   const [runs, setRuns] = useState<RunListItem[]>([]);
@@ -65,10 +68,6 @@ export function ValidationRunsList() {
     };
   }, [projectId]);
 
-  function handleNewValidation() {
-    setPickerOpen(true);
-  }
-
   return (
     <div className="mx-auto w-full max-w-[1200px]">
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -90,14 +89,21 @@ export function ValidationRunsList() {
             </Link>
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleNewValidation}
-          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 self-start rounded border border-transparent bg-primary-container px-4 text-base font-semibold leading-7 text-on-primary shadow-ambient transition-colors hover:bg-primary hover:shadow-md sm:self-auto"
-        >
-          <AddIcon className="h-4 w-4" />
-          New Validation
-        </button>
+        {project ? (
+          <Link href="/validation/new" className={newButtonClassName}>
+            <AddIcon className="h-4 w-4" />
+            New Validation
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className={newButtonClassName}
+          >
+            <AddIcon className="h-4 w-4" />
+            New Validation
+          </button>
+        )}
       </div>
 
       <SectionCard className="overflow-hidden">

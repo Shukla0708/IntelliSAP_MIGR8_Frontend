@@ -16,9 +16,9 @@ type ProjectPickerDialogProps = {
 };
 
 /**
- * Confirms which project a create-flow should use.
- * If a project is already selected, still shows confirm so the user knows the target.
- * If none selected, forces a pick before continuing.
+ * Confirms which project a create-flow should use when none is selected yet
+ * (Activity lists, or Current project with no sidebar selection).
+ * If a project is already selected, Current project New buttons skip this dialog.
  */
 export function ProjectPickerDialog({
   open,
