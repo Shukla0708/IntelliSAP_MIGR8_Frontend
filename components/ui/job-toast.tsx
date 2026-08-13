@@ -8,6 +8,7 @@ import {
   isJobResultPath,
   listTrackedJobs,
   resultPathForJob,
+  statusUrlForJob,
   untrackJob,
   type TrackedJob,
 } from "@/lib/job-tracker";
@@ -40,28 +41,23 @@ export function JobReadyBanner() {
       for (const job of jobs) {
         if (isJobResultPath(pathname, job)) continue;
         try {
-          const url =
-            job.kind === "validation"
-              ? `/api/runs/${job.id}/result`
-              : `/api/comparisons/${job.id}/result`;
-          const { data } = await apiClient.get<JobStatusPayload>(url);
+          const { data } = await apiClient.get<JobStatusPayload>(statusUrlForJob(job));
           const status = data.status;
           if (status !== "completed" && status !== "failed") continue;
           untrackJob(job);
           if (cancelled) return;
+          const labels = {
+            validation: ["Validation failed", "Validation ready"],
+            comparison: ["Comparison failed", "Comparison ready"],
+            mapping: ["Field mapping failed", "Field mapping ready"],
+          } as const;
+          const [failedTitle, readyTitle] = labels[job.kind];
           setToast({
             job,
             href: resultPathForJob(job),
             failed: status === "failed",
             detail: data.errorMessage ?? data.error_message ?? null,
-            title:
-              status === "failed"
-                ? job.kind === "validation"
-                  ? "Validation failed"
-                  : "Comparison failed"
-                : job.kind === "validation"
-                  ? "Validation ready"
-                  : "Comparison ready",
+            title: status === "failed" ? failedTitle : readyTitle,
           });
           return;
         } catch {

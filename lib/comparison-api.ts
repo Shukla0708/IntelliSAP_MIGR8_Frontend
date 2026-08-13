@@ -1,9 +1,7 @@
 import type { ComparisonRunStatus } from "@/data/comparison";
 import type { ReconciliationReviewSummary } from "@/data/comparison-results";
 import apiClient from "@/lib/axios";
-
-// Reconciling up to 200k rows takes far longer than the client default.
-const EXECUTE_TIMEOUT_MS = 10 * 60 * 1000;
+import { trackJob } from "@/lib/job-tracker";
 
 export type ComparisonRunListItem = {
   id: string;
@@ -88,7 +86,7 @@ export async function uploadComparisonFiles(
   const { data } = await apiClient.post<{
     preload_fields: string[];
     postload_fields: string[];
-  }>(`/api/comparisons/${runId}/upload`, formData);
+  }>(`/api/comparisons/${runId}/upload`, formData, { timeout: 0 });
   return data;
 }
 
@@ -99,8 +97,8 @@ export async function executeComparisonRun(
   await apiClient.post(
     `/api/comparisons/${runId}/execute`,
     { mapping_id: mappingId ?? null },
-    { timeout: EXECUTE_TIMEOUT_MS },
   );
+  trackJob({ kind: "comparison", id: runId });
 }
 
 export async function fetchComparisonReview(runId: string): Promise<ComparisonReview> {
