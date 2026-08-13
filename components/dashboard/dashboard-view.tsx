@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ACTIVITY_MAPPING_RUNS } from "@/components/activity/activity-mappings-list";
 import type { ActivityValidationRun } from "@/components/activity/activity-validations-list";
 import { KpiGrid, SectionCard } from "@/components/dashboard/kpi-card";
 import { MigrationReadiness } from "@/components/dashboard/migration-readiness";
@@ -19,6 +18,8 @@ import {
   fetchComparisonRuns,
   type ComparisonRunListItem,
 } from "@/lib/comparison-api";
+import { toFieldMappingRunStatus } from "@/data/field-mapping";
+import { fetchMappingRuns, fetchMappingStats, type MappingRunListItem, type MappingStats } from "@/lib/mapping-api";
 import type { KpiMetric, RecentProject } from "@/data/dashboard";
 
 type ActivityFeedItem = {
@@ -66,6 +67,8 @@ export function DashboardView() {
   const { projects, selectProject, loading: projectsLoading } = useProject();
   const [runs, setRuns] = useState<ActivityValidationRun[]>([]);
   const [comparisons, setComparisons] = useState<ComparisonRunListItem[]>([]);
+  const [mappings, setMappings] = useState<MappingRunListItem[]>([]);
+  const [mappingStats, setMappingStats] = useState<MappingStats | null>(null);
   const [runsLoading, setRunsLoading] = useState(true);
 
   useEffect(() => {
@@ -88,6 +91,28 @@ export function DashboardView() {
       .catch(() => {
         if (!cancelled) setComparisons([]);
       });
+    fetchMappingStats()
+      .then((stats) => {
+        if (!cancelled) setMappingStats(stats);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMappingStats({
+            approved: 0,
+            awaitingApproval: 0,
+            processing: 0,
+            failed: 0,
+            total: 0,
+          });
+        }
+      });
+    fetchMappingRuns({ limit: 8 })
+      .then((rows) => {
+        if (!cancelled) setMappings(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setMappings([]);
+      });
     return () => {
       cancelled = true;
     };
@@ -104,18 +129,14 @@ export function DashboardView() {
       (sum, run) => sum + run.mismatches,
       0,
     );
-    const mappingUnmapped = ACTIVITY_MAPPING_RUNS.reduce(
-      (sum, run) => sum + run.unmapped,
-      0,
-    );
-    const mappingFields = ACTIVITY_MAPPING_RUNS.reduce(
-      (sum, run) => sum + parseRecordCount(run.fields.replace(/fields?/i, "")),
-      0,
-    );
+    const mappingReviewable = mappingStats
+      ? mappingStats.approved + mappingStats.awaitingApproval
+      : 0;
+    const mappingApproved = mappingStats?.approved ?? 0;
     const mappingApproval =
-      mappingFields > 0
-        ? Math.round(((mappingFields - mappingUnmapped) / mappingFields) * 100)
-        : 0;
+      mappingReviewable === 0
+        ? 0
+        : Math.round((mappingApproved / mappingReviewable) * 100);
 
     return [
       {
@@ -157,10 +178,15 @@ export function DashboardView() {
         label: "Mapping Approval",
         value: `${mappingApproval}%`,
         progress: mappingApproval,
-        hint: "From activity (mock until API)",
+        hint:
+          mappingStats == null
+            ? "Loading…"
+            : mappingReviewable === 0
+              ? "No mappings yet"
+              : `${mappingApproved} of ${mappingReviewable} approved`,
       },
     ];
-  }, [comparisons, projects.length, runs]);
+  }, [comparisons, mappingStats, projects.length, runs]);
 
   const recentProjects: RecentProject[] = useMemo(() => {
     const runCounts = new Map<string, number>();
@@ -202,19 +228,24 @@ export function DashboardView() {
       meta: `${run.mismatches} mismatches`,
     }));
 
-    const mappingItems: ActivityFeedItem[] = ACTIVITY_MAPPING_RUNS.slice(0, 2).map(
-      (run) => ({
-        id: `map-${run.id}`,
-        type: "mapping",
-        name: run.name,
+    const mappingItems: ActivityFeedItem[] = mappings.slice(0, 2).map((run) => {
+      const status = toFieldMappingRunStatus(run.status);
+      const unmapped = Math.max(run.totalSourceFields - run.mappedFields, 0);
+      return {
+        id: `map-${run.mappingRunId}`,
+        type: "mapping" as const,
+        name: run.mappingName || "New field mapping run",
         projectName: run.projectName,
-        href: `/field-mapping/${run.id}`,
-        meta: `${run.unmapped} unmapped`,
-      }),
-    );
+        href: `/field-mapping/${run.mappingRunId}`,
+        meta:
+          status === "awaiting_approval"
+            ? "Waiting for approval"
+            : `${unmapped} unmapped`,
+      };
+    });
 
     return [...validationItems, ...comparisonItems, ...mappingItems].slice(0, 8);
-  }, [comparisons, runs]);
+  }, [comparisons, mappings, runs]);
 
   const readiness = useMemo(() => {
     const completed = runs.filter((r) => r.status === "completed").length;
@@ -231,14 +262,13 @@ export function DashboardView() {
               comparisons.length) *
               100,
           );
+    const mappingReviewable = mappingStats
+      ? mappingStats.approved + mappingStats.awaitingApproval
+      : 0;
     const mappingScore =
-      ACTIVITY_MAPPING_RUNS.length === 0
+      mappingStats == null || mappingReviewable === 0
         ? 0
-        : Math.round(
-            (ACTIVITY_MAPPING_RUNS.filter((r) => r.status === "completed").length /
-              ACTIVITY_MAPPING_RUNS.length) *
-              100,
-          );
+        : Math.round((mappingStats.approved / mappingReviewable) * 100);
     const score = Math.round(
       (validationScore + comparisonScore + mappingScore) / 3,
     );
@@ -255,7 +285,7 @@ export function DashboardView() {
       ],
       failed,
     };
-  }, [comparisons, runs]);
+  }, [comparisons, mappingStats, runs]);
 
   const loading = projectsLoading || runsLoading;
 

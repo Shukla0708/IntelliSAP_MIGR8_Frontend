@@ -18,7 +18,35 @@ export const FIELD_MAPPING_PROJECT_NAME =
 export const FIELD_MAPPING_TOPBAR_TITLE =
   "AI Mapping: Upload Source & Target Schemas";
 
-export type FieldMappingRunStatus = "completed" | "failed" | "running";
+export type FieldMappingRunStatus =
+  | "completed"
+  | "awaiting_approval"
+  | "failed"
+  | "running";
+
+export const FIELD_MAPPING_STATUS_STYLES: Record<
+  FieldMappingRunStatus,
+  { label: string; className: string }
+> = {
+  completed: { label: "Completed", className: "bg-success/10 text-success" },
+  awaiting_approval: {
+    label: "Waiting for approval",
+    className: "bg-tertiary-container/20 text-tertiary",
+  },
+  failed: { label: "Failed", className: "bg-error-container text-error" },
+  running: { label: "Running", className: "bg-primary-container/10 text-primary" },
+};
+
+export function toFieldMappingRunStatus(status: string): FieldMappingRunStatus {
+  if (
+    status === "completed" ||
+    status === "awaiting_approval" ||
+    status === "failed"
+  ) {
+    return status;
+  }
+  return "running";
+}
 
 export type FieldMappingRun = {
   id: string;

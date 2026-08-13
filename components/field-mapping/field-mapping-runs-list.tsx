@@ -7,25 +7,11 @@ import { ProjectPickerDialog } from "@/components/projects/project-picker-dialog
 import { AddIcon, HubIcon } from "@/components/ui/icons";
 import apiClient from "@/lib/axios";
 import { useDefaultProject } from "@/lib/use-default-project";
-import type { FieldMappingRunStatus } from "@/data/field-mapping";
-
-const statusStyles: Record<
-  FieldMappingRunStatus,
-  { label: string; className: string }
-> = {
-  completed: {
-    label: "Completed",
-    className: "bg-success/10 text-success",
-  },
-  failed: {
-    label: "Failed",
-    className: "bg-error-container text-error",
-  },
-  running: {
-    label: "Running",
-    className: "bg-primary-container/10 text-primary",
-  },
-};
+import {
+  FIELD_MAPPING_STATUS_STYLES,
+  toFieldMappingRunStatus,
+  type FieldMappingRunStatus,
+} from "@/data/field-mapping";
 
 type MappingRunApiItem = {
   mappingRunId: string;
@@ -47,18 +33,13 @@ type RunListItem = {
   ranAt: string;
 };
 
-function toRunStatus(status: string): FieldMappingRunStatus {
-  if (status === "completed" || status === "failed") return status;
-  return "running";
-}
-
 function mapRun(run: MappingRunApiItem): RunListItem {
   const created = run.createdAt ? new Date(run.createdAt) : null;
 
   return {
     id: run.mappingRunId,
     name: run.mappingName || "New field mapping run",
-    status: toRunStatus(run.status),
+    status: toFieldMappingRunStatus(run.status),
     fields: `${run.totalSourceFields} fields`,
     unmapped: Math.max(run.totalSourceFields - run.mappedFields, 0),
     ranAt:
@@ -186,7 +167,7 @@ export function FieldMappingRunsList() {
           )}
 
           {runs.map((run) => {
-            const status = statusStyles[run.status];
+            const status = FIELD_MAPPING_STATUS_STYLES[run.status];
 
             return (
               <Link

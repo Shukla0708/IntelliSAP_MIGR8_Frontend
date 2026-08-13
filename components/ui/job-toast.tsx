@@ -43,7 +43,8 @@ export function JobReadyBanner() {
         try {
           const { data } = await apiClient.get<JobStatusPayload>(statusUrlForJob(job));
           const status = data.status;
-          if (status !== "completed" && status !== "failed") continue;
+          const mappingReady = job.kind === "mapping" && status === "awaiting_approval";
+          if (status !== "completed" && status !== "failed" && !mappingReady) continue;
           untrackJob(job);
           if (cancelled) return;
           const labels = {

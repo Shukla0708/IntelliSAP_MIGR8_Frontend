@@ -78,6 +78,19 @@ export type MappingRunListItem = {
   createdAt: string | null;
 };
 
+export type MappingStats = {
+  approved: number;
+  awaitingApproval: number;
+  processing: number;
+  failed: number;
+  total: number;
+};
+
+export async function fetchMappingStats(): Promise<MappingStats> {
+  const { data } = await apiClient.get<MappingStats>("/api/mappings/stats");
+  return data;
+}
+
 export async function fetchMappingRuns(options?: {
   projectId?: string;
   limit?: number;

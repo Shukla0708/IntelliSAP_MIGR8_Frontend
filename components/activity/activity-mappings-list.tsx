@@ -7,49 +7,13 @@ import { ProjectPickerDialog } from "@/components/projects/project-picker-dialog
 import { AddIcon, HubIcon, SearchIcon } from "@/components/ui/icons";
 import { useProject } from "@/contexts/project-context";
 import {
-  PREVIOUS_FIELD_MAPPING_RUNS,
-  type FieldMappingRun,
-  type FieldMappingRunStatus,
+  FIELD_MAPPING_STATUS_STYLES,
+  toFieldMappingRunStatus,
 } from "@/data/field-mapping";
 import { fetchMappingRuns, type MappingRunListItem } from "@/lib/mapping-api";
 
-const statusStyles: Record<
-  FieldMappingRunStatus,
-  { label: string; className: string }
-> = {
-  completed: { label: "Completed", className: "bg-success/10 text-success" },
-  failed: { label: "Failed", className: "bg-error-container text-error" },
-  running: { label: "Running", className: "bg-primary-container/10 text-primary" },
-};
-
-export type ActivityMappingRun = FieldMappingRun & {
-  projectId: string;
-  projectName: string;
-};
-
-/** Mock cross-project mappings still backing the dashboard KPI cards */
-export const ACTIVITY_MAPPING_RUNS: ActivityMappingRun[] = [
-  {
-    ...PREVIOUS_FIELD_MAPPING_RUNS[0],
-    projectId: "mock-customer",
-    projectName: "Customer Master — Oracle → SAP",
-  },
-  {
-    ...PREVIOUS_FIELD_MAPPING_RUNS[1],
-    projectId: "mock-customer",
-    projectName: "Customer Master — Oracle → SAP",
-  },
-  {
-    ...PREVIOUS_FIELD_MAPPING_RUNS[2],
-    projectId: "mock-vendor",
-    projectName: "Vendor Master",
-  },
-];
-
-function toRunStatus(status: string): FieldMappingRunStatus {
-  if (status === "completed" || status === "failed") return status;
-  return "running";
-}
+/** Compatibility stub for stale Next.js compiles of the dashboard. */
+export const ACTIVITY_MAPPING_RUNS: MappingRunListItem[] = [];
 
 export function ActivityMappingsList() {
   const { projects } = useProject();
@@ -156,7 +120,7 @@ export function ActivityMappingsList() {
           )}
 
           {filtered.map((run) => {
-            const status = statusStyles[toRunStatus(run.status)];
+            const status = FIELD_MAPPING_STATUS_STYLES[toFieldMappingRunStatus(run.status)];
             const unmapped = Math.max(run.totalSourceFields - run.mappedFields, 0);
             const created = run.createdAt ? new Date(run.createdAt) : null;
             const ranAt =
