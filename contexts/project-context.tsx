@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import apiClient, { getApiErrorMessage } from "@/lib/axios";
+import { useAuth } from "@/contexts/auth-context";
 import type { MigrationProject } from "@/data/projects";
 
 type ApiProject = {
@@ -28,7 +29,11 @@ type ProjectContextValue = {
 };
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
-const SELECTED_PROJECT_KEY = "migr8_selected_project_id";
+const LEGACY_SELECTED_PROJECT_KEY = "migr8_selected_project_id";
+
+function selectedProjectStorageKey(userId: string) {
+  return `migr8_selected_project_id_${userId}`;
+}
 
 function mapProject(project: ApiProject): MigrationProject {
   const created = new Date(project.created_at);
@@ -47,19 +52,28 @@ type ProjectProviderProps = {
 };
 
 export function ProjectProvider({ children }: ProjectProviderProps) {
+  const { user, token, isLoading: authLoading } = useAuth();
   const [projects, setProjects] = useState<MigrationProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refreshProjects = useCallback(async () => {
+    if (!user) {
+      setProjects([]);
+      setSelectedProjectId(null);
+      return;
+    }
+
     const { data } = await apiClient.get<ApiProject[]>("/api/projects/");
     const mapped = data.map(mapProject);
     setProjects(mapped);
 
+    const storageKey = selectedProjectStorageKey(user.id);
     setSelectedProjectId((current) => {
       const stored =
         typeof window !== "undefined"
-          ? localStorage.getItem(SELECTED_PROJECT_KEY)
+          ? localStorage.getItem(storageKey) ??
+            localStorage.getItem(LEGACY_SELECTED_PROJECT_KEY)
           : null;
       const preferred = current ?? stored;
       if (preferred && mapped.some((project) => project.id === preferred)) {
@@ -67,12 +81,22 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
       }
       return mapped[0]?.id ?? null;
     });
-  }, []);
+  }, [user]);
 
   useEffect(() => {
+    if (authLoading) return;
+
+    if (!token || !user) {
+      setProjects([]);
+      setSelectedProjectId(null);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     async function load() {
+      setLoading(true);
       try {
         await refreshProjects();
       } catch {
@@ -85,18 +109,21 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
       }
     }
 
-    load();
+    void load();
     return () => {
       cancelled = true;
     };
-  }, [refreshProjects]);
+  }, [authLoading, token, user?.id, refreshProjects]);
 
-  const selectProject = useCallback((projectId: string) => {
-    setSelectedProjectId(projectId);
-    if (typeof window !== "undefined") {
-      localStorage.setItem(SELECTED_PROJECT_KEY, projectId);
-    }
-  }, []);
+  const selectProject = useCallback(
+    (projectId: string) => {
+      setSelectedProjectId(projectId);
+      if (typeof window !== "undefined" && user?.id) {
+        localStorage.setItem(selectedProjectStorageKey(user.id), projectId);
+      }
+    },
+    [user?.id],
+  );
 
   const createProject = useCallback(
     async (name: string) => {
