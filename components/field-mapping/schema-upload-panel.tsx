@@ -16,7 +16,7 @@ const iconMap: Record<
 
 type SchemaUploadPanelProps = {
   card: SchemaUploadCard;
-  file: File | null;
+  file?: File | null;
   onFileSelected: (file: File) => void;
 };
 

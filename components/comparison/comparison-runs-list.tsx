@@ -1,18 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SectionCard } from "@/components/dashboard/kpi-card";
 import { ProjectPickerDialog } from "@/components/projects/project-picker-dialog";
 import { AddIcon, CompareIcon } from "@/components/ui/icons";
 import { useProject } from "@/contexts/project-context";
-import type { ComparisonRun, ComparisonRunStatus } from "@/data/comparison";
-import { PREVIOUS_COMPARISON_RUNS } from "@/data/comparison";
+import type { ComparisonRunStatus } from "@/data/comparison";
+import { fetchComparisonRuns, type ComparisonRunListItem } from "@/lib/comparison-api";
+import { comparisonRunHref } from "@/lib/comparison-routes";
 
 const statusStyles: Record<
   ComparisonRunStatus,
   { label: string; className: string }
 > = {
+  draft: {
+    label: "Draft",
+    className: "bg-surface-container-high text-on-surface-variant",
+  },
   completed: {
     label: "Completed",
     className: "bg-success/10 text-success",
@@ -27,15 +32,30 @@ const statusStyles: Record<
   },
 };
 
-type ComparisonRunsListProps = {
-  runs?: ComparisonRun[];
-};
-
-export function ComparisonRunsList({
-  runs = PREVIOUS_COMPARISON_RUNS,
-}: ComparisonRunsListProps) {
+export function ComparisonRunsList() {
   const { selectedProject } = useProject();
+  const [runs, setRuns] = useState<ComparisonRunListItem[] | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  const projectId = selectedProject?.id ?? null;
+  const loading = projectId !== null && runs === null;
+
+  useEffect(() => {
+    if (!projectId) return;
+
+    let cancelled = false;
+    fetchComparisonRuns({ projectId })
+      .then((data) => {
+        if (!cancelled) setRuns(data);
+      })
+      .catch(() => {
+        if (!cancelled) setRuns([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   return (
     <div className="mx-auto w-full max-w-[1200px]">
@@ -76,15 +96,21 @@ export function ComparisonRunsList({
         </div>
 
         <div className="divide-y divide-outline-variant">
-          {runs.map((run) => {
-            const status = statusStyles[run.status];
+          {loading && (
+            <p className="p-4 text-sm text-on-surface-variant">Loading runs…</p>
+          )}
 
-            return (
-              <Link
-                key={run.id}
-                href={`/compare/${run.id}`}
-                className="flex flex-col gap-3 p-4 transition-colors hover:bg-surface-container-low sm:flex-row sm:items-center sm:justify-between"
-              >
+          {!loading && (runs?.length ?? 0) === 0 && (
+            <p className="p-4 text-sm text-on-surface-variant">
+              No comparison runs in this project yet.
+            </p>
+          )}
+
+          {(runs ?? []).map((run) => {
+            const status = statusStyles[run.status] ?? statusStyles.draft;
+            const href = comparisonRunHref(run);
+            const body = (
+              <>
                 <div className="flex items-center gap-4">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-primary-container/10 text-primary">
                     <CompareIcon className="h-5 w-5" />
@@ -99,7 +125,7 @@ export function ComparisonRunsList({
                       </span>
                       <span className="text-xs text-outline">•</span>
                       <span className="font-mono text-xs font-medium leading-4 text-on-surface-variant">
-                        {run.ranAt}
+                        {run.ranAt ?? "Not run yet"}
                       </span>
                     </div>
                   </div>
@@ -121,7 +147,24 @@ export function ComparisonRunsList({
                     {run.mismatches} mismatches
                   </span>
                 </div>
+              </>
+            );
+
+            return href ? (
+              <Link
+                key={run.id}
+                href={href}
+                className="flex flex-col gap-3 p-4 transition-colors hover:bg-surface-container-low sm:flex-row sm:items-center sm:justify-between"
+              >
+                {body}
               </Link>
+            ) : (
+              <div
+                key={run.id}
+                className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                {body}
+              </div>
             );
           })}
         </div>

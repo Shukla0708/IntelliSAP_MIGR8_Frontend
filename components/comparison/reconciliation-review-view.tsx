@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type ComponentType } from "react";
+import { useRef, useState, type ComponentType } from "react";
 import { Button } from "@/components/ui/button";
 import {
   CheckCircleIcon,
@@ -16,6 +16,8 @@ import type {
   ReconciliationDiscrepancy,
   ReconciliationReviewSummary,
 } from "@/data/comparison-results";
+import { getApiErrorMessage } from "@/lib/axios";
+import { fetchComparisonDownloadUrl } from "@/lib/comparison-api";
 
 type ReconciliationReviewViewProps = {
   review: ReconciliationReviewSummary;
@@ -137,9 +139,15 @@ export function ReconciliationReviewView({
   review,
 }: ReconciliationReviewViewProps) {
   const tableRef = useRef<HTMLDivElement>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
-  function handleDownload() {
-    console.info("Download comparison report clicked (mock)", { id: review.id });
+  async function handleDownload() {
+    setDownloadError(null);
+    try {
+      window.open(await fetchComparisonDownloadUrl(review.id));
+    } catch (err) {
+      setDownloadError(getApiErrorMessage(err, "Report is not ready yet"));
+    }
   }
 
   function handleViewExceptions() {
@@ -182,6 +190,10 @@ export function ReconciliationReviewView({
           </Button>
         </div>
       </div>
+
+      {downloadError ? (
+        <p className="mb-4 text-sm font-semibold text-error">{downloadError}</p>
+      ) : null}
 
       <div className="mb-6 grid grid-cols-1 gap-5 sm:grid-cols-3 lg:mb-8">
         <SummaryCard
