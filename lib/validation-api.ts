@@ -6,6 +6,7 @@ import {
   type ValidationFieldRule,
 } from "@/data/validation";
 import apiClient from "@/lib/axios";
+import { trackJob } from "@/lib/job-tracker";
 
 export type ValidationRunDetail = {
   id: string;
@@ -14,6 +15,10 @@ export type ValidationRunDetail = {
   status: string;
   source_filename: string | null;
   has_source_file: boolean;
+  processed_rows?: number;
+  total_rows?: number;
+  error_message?: string | null;
+  has_result_file?: boolean;
   fields: Array<{
     field_name: string;
     flag_key: boolean;
@@ -100,12 +105,21 @@ export async function createValidationRun(
 export async function uploadSourceFile(
   runId: string,
   file: File,
+  onProgress?: (ratio: number) => void,
 ): Promise<string[]> {
   const formData = new FormData();
   formData.append("file", file);
   const { data } = await apiClient.post<{ fields: string[] }>(
     `/api/runs/${runId}/upload`,
     formData,
+    {
+      timeout: 0,
+      onUploadProgress: (event) => {
+        if (onProgress && event.total) {
+          onProgress(event.loaded / event.total);
+        }
+      },
+    },
   );
   return data.fields;
 }
@@ -119,6 +133,7 @@ export async function saveValidationRules(
 
 export async function executeValidationRun(runId: string): Promise<void> {
   await apiClient.post(`/api/runs/${runId}/execute`);
+  trackJob({ kind: "validation", id: runId });
 }
 
 export async function updateValidationDraft(

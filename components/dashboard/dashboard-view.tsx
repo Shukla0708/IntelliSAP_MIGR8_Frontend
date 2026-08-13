@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ACTIVITY_COMPARISON_RUNS } from "@/components/activity/activity-comparisons-list";
 import { ACTIVITY_MAPPING_RUNS } from "@/components/activity/activity-mappings-list";
 import type { ActivityValidationRun } from "@/components/activity/activity-validations-list";
 import { KpiGrid, SectionCard } from "@/components/dashboard/kpi-card";
@@ -16,6 +15,10 @@ import {
 } from "@/components/ui/icons";
 import { useProject } from "@/contexts/project-context";
 import apiClient from "@/lib/axios";
+import {
+  listComparisons,
+  type ComparisonListItem,
+} from "@/lib/comparison-api";
 import type { KpiMetric, RecentProject } from "@/data/dashboard";
 
 type ActivityFeedItem = {
@@ -62,6 +65,7 @@ export function DashboardView() {
   const router = useRouter();
   const { projects, selectProject, loading: projectsLoading } = useProject();
   const [runs, setRuns] = useState<ActivityValidationRun[]>([]);
+  const [comparisons, setComparisons] = useState<ComparisonListItem[]>([]);
   const [runsLoading, setRunsLoading] = useState(true);
 
   useEffect(() => {
@@ -77,6 +81,13 @@ export function DashboardView() {
       .finally(() => {
         if (!cancelled) setRunsLoading(false);
       });
+    listComparisons()
+      .then((rows) => {
+        if (!cancelled) setComparisons(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setComparisons([]);
+      });
     return () => {
       cancelled = true;
     };
@@ -89,7 +100,7 @@ export function DashboardView() {
     );
     const totalErrors = runs.reduce((sum, run) => sum + (run.errors || 0), 0);
     const completedRuns = runs.filter((run) => run.status === "completed").length;
-    const comparisonMismatches = ACTIVITY_COMPARISON_RUNS.reduce(
+    const comparisonMismatches = comparisons.reduce(
       (sum, run) => sum + run.mismatches,
       0,
     );
@@ -139,7 +150,7 @@ export function DashboardView() {
         value: String(comparisonMismatches),
         tone: "tertiary",
         icon: "difference",
-        hint: "From activity (mock until API)",
+        hint: "From comparison runs",
       },
       {
         id: "mapping-approval",
@@ -149,7 +160,7 @@ export function DashboardView() {
         hint: "From activity (mock until API)",
       },
     ];
-  }, [projects.length, runs]);
+  }, [comparisons, projects.length, runs]);
 
   const recentProjects: RecentProject[] = useMemo(() => {
     const runCounts = new Map<string, number>();
@@ -182,14 +193,11 @@ export function DashboardView() {
       meta: `${run.errors} errors · ${run.status}`,
     }));
 
-    const comparisonItems: ActivityFeedItem[] = ACTIVITY_COMPARISON_RUNS.slice(
-      0,
-      2,
-    ).map((run) => ({
+    const comparisonItems: ActivityFeedItem[] = comparisons.slice(0, 2).map((run) => ({
       id: `cmp-${run.id}`,
       type: "comparison",
       name: run.name,
-      projectName: run.projectName,
+      projectName: run.project_name,
       href: `/compare/${run.id}`,
       meta: `${run.mismatches} mismatches`,
     }));
@@ -206,7 +214,7 @@ export function DashboardView() {
     );
 
     return [...validationItems, ...comparisonItems, ...mappingItems].slice(0, 8);
-  }, [runs]);
+  }, [comparisons, runs]);
 
   const readiness = useMemo(() => {
     const completed = runs.filter((r) => r.status === "completed").length;
@@ -216,12 +224,11 @@ export function DashboardView() {
         ? 0
         : Math.round((completed / Math.max(runs.length, 1)) * 100);
     const comparisonScore =
-      ACTIVITY_COMPARISON_RUNS.length === 0
+      comparisons.length === 0
         ? 0
         : Math.round(
-            (ACTIVITY_COMPARISON_RUNS.filter((r) => r.status === "completed")
-              .length /
-              ACTIVITY_COMPARISON_RUNS.length) *
+            (comparisons.filter((r) => r.status === "completed").length /
+              comparisons.length) *
               100,
           );
     const mappingScore =
@@ -248,7 +255,7 @@ export function DashboardView() {
       ],
       failed,
     };
-  }, [runs]);
+  }, [comparisons, runs]);
 
   const loading = projectsLoading || runsLoading;
 

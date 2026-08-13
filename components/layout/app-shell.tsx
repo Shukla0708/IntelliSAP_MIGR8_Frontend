@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { ResultsChatDrawer } from "@/components/chat/results-chat-drawer";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppTopbar } from "@/components/layout/app-topbar";
+import { JobReadyBanner } from "@/components/ui/job-toast";
 import { CloseIcon } from "@/components/ui/icons";
 
 type AppShellProps = {
@@ -57,6 +58,7 @@ export function AppShell({
           />
           <main className={mainClassName}>{children}</main>
           <ResultsChatDrawer />
+          <JobReadyBanner />
         </div>
     </div>
   );
