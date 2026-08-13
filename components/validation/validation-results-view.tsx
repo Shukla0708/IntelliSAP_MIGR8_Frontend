@@ -347,13 +347,10 @@ export function ValidationResultsView({ result }: ValidationResultsViewProps) {
                   "Actual Value",
                   "Expected",
                   "Error Type",
-                  "Action",
                 ].map((header) => (
                   <th
                     key={header}
-                    className={`px-4 py-2 text-xs font-semibold text-on-surface-variant ${
-                      header === "Action" ? "text-right" : ""
-                    }`}
+                    className="px-4 py-2 text-xs font-semibold text-on-surface-variant"
                   >
                     {header}
                   </th>
@@ -389,7 +386,7 @@ export function ValidationResultsView({ result }: ValidationResultsViewProps) {
 
 function ExceptionRow({ row }: { row: ValidationException }) {
   return (
-    <tr className="group cursor-pointer transition-colors hover:bg-[#F0F7FF]">
+    <tr className="transition-colors hover:bg-[#F0F7FF]">
       <td className="px-4 py-2">
         <SeverityBadge severity={row.severity} />
       </td>
@@ -404,14 +401,6 @@ function ExceptionRow({ row }: { row: ValidationException }) {
       </td>
       <td className="px-4 py-2 text-on-surface-variant italic">{row.expected}</td>
       <td className="px-4 py-2">{row.errorType}</td>
-      <td className="px-4 py-2 text-right">
-        <button
-          type="button"
-          className="text-xs font-semibold uppercase tracking-[0.02em] text-primary opacity-0 transition-opacity group-hover:opacity-100 hover:underline"
-        >
-          {row.actionLabel}
-        </button>
-      </td>
     </tr>
   );
 }
