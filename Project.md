@@ -70,6 +70,7 @@ Public (no JWT): `/sign-in`, `/register`. All other product routes live under `a
 | `/validation` | `app/(app)/validation/page.tsx` | `ValidationRunsList` | Project-scoped prior runs + **New Validation** |
 | `/validation/new` | `app/(app)/validation/new/page.tsx` | `AdvancedValidationView` | Run name + rules table + upload zone |
 | `/validation_result/[id]` | `app/(app)/validation_result/[id]/page.tsx` | `ValidationResultsView` | Per-run results; `generateStaticParams` |
+| `/report` | `app/(app)/report/page.tsx` | `ProjectReportView` | Project-scoped migration report (validation live; compare/map preview) |
 
 ### App shell UX
 
@@ -108,7 +109,7 @@ Defined in `data/dashboard.ts` (`SIDEBAR_OVERVIEW`, `SIDEBAR_ACTIVITY`, `SIDEBAR
 | Current project | Validation | `/validation` (+ `/validation_result/*`) |
 | Current project | Comparison | `/compare` |
 | Current project | Field Mapping | `/field-mapping` |
-| Current project | Reports | `#` (TBD) |
+| Current project | Reports | `/report` |
 | Footer | Profile | menu (logout) |
 | Footer | Settings | `#` (TBD) |
 
@@ -192,7 +193,8 @@ MIGR8_AI_frontend/
 │   │   ├── compare/
 │   │   ├── field-mapping/
 │   │   ├── validation/
-│   │   └── validation_result/
+│   │   ├── validation_result/
+│   │   └── report/
 │   └── favicon.ico
 ├── middleware.ts                # Cookie gate: migr8_token required except sign-in/register
 ├── components/
@@ -241,6 +243,12 @@ MIGR8_AI_frontend/
 │   │   ├── projects-view.tsx
 │   │   ├── create-project-dialog.tsx
 │   │   └── project-picker-dialog.tsx  # Gate create flows to a project
+│   ├── reports/
+│   │   ├── project-report-view.tsx
+│   │   ├── report-pillar-section.tsx
+│   │   ├── validation-report-section.tsx
+│   │   ├── comparison-report-section.tsx
+│   │   └── mapping-report-section.tsx
 │   ├── providers.tsx            # AuthProvider → ProjectProvider
 │   └── ui/
 │       ├── button.tsx
@@ -256,7 +264,8 @@ MIGR8_AI_frontend/
 │   ├── field-mapping.ts         # Runs, schema cards (incl. sapFetch), topbar title
 │   ├── field-mapping-workspace.ts # Workspace rows, prospects, AI review mock data
 │   ├── validation.ts            # Runs, field rules, rule config types
-│   └── validation-results.ts    # Per-run result summaries + exceptions
+│   ├── validation-results.ts    # Per-run result summaries + exceptions
+│   └── project-report.ts        # Report types + mock compare/map aggregators
 ├── contexts/
 │   ├── auth-context.tsx         # useAuth — user/token/login/register/logout
 │   └── project-context.tsx      # Selected project (mock list for now)
@@ -264,7 +273,8 @@ MIGR8_AI_frontend/
 │   ├── axios.ts                 # Shared axios + Bearer + 401 → sign-in
 │   ├── auth-api.ts              # login / register / fetchMe
 │   ├── auth-storage.ts          # localStorage + migr8_token cookie sync
-│   └── auth-types.ts            # AuthUser / AuthResponse types
+│   ├── auth-types.ts            # AuthUser / AuthResponse types
+│   └── project-report-api.ts    # fetchProjectReport — API + mock compare/map merge
 ├── public/
 │   ├── brand/migr8-logo.png
 │   ├── avatars/user.png
@@ -314,6 +324,7 @@ await apiClient.post("/api/auth/login", { email, password });
 | Validation list / upload / rules / execute / results / download | Live |
 | Activity validations (`GET /api/runs/`) | Live cross-project for current user |
 | Dashboard KPIs / recent activity | Live for projects + validations; compare/mapping still mock-augmented |
+| Project report (`GET /api/projects/{id}/report` + mock merge) | Live validation KPIs; compare/mapping preview from fixtures |
 | Field mapping / comparison (project + activity lists) | UI mock (friend's screens) until APIs exist |
 
 `AppProviders` wraps `AuthProvider` → `ProjectProvider`. Validation uses `useDefaultProject()` which reads the selected project from context. **Browse** can be global; **create** always confirms a project via `ProjectPickerDialog`.
@@ -417,6 +428,13 @@ npm run lint     # ESLint
 ---
 
 ## Session Log
+
+### 2026-08-13 — Project report screen (`/report`)
+
+- Wired **Current project → Reports** to `/report` (sidebar `matchPrefixes: ["/report"]`).
+- Added `ProjectReportView` with readiness ring, needs-attention card, KPI grid, and three pillar sections.
+- Validation pillar uses live `GET /api/projects/{id}/report`; comparison/mapping use mock aggregates with **Preview data** badges.
+- Composite readiness: Validation 50% + Comparison 25% + Mapping 25% (client-side merge in `project-report-api.ts`).
 
 ### 2026-08-13 — Dual-scope nav (Project work + Global activity)
 
@@ -586,7 +604,7 @@ npm run lint     # ESLint
 
 ## Open Questions / TBD
 
-- Wire remaining sidebar routes: project Reports, Settings
+- Wire remaining sidebar routes: Settings
 - Wire compare/mapping APIs; replace activity mock lists
 - httpOnly cookie / refresh tokens (currently Bearer + readable cookie for middleware)
 - Remove dead validation mock fixtures after cutover

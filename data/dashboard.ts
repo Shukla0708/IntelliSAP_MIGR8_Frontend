@@ -80,8 +80,9 @@ export const SIDEBAR_PROJECT_TOOLS: NavItem[] = [
   },
   {
     label: "Reports",
-    href: "#",
+    href: "/report",
     icon: "analytics",
+    matchPrefixes: ["/report"],
   },
 ];
 
