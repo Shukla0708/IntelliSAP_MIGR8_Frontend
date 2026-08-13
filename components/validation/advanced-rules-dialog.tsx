@@ -84,6 +84,7 @@ export function AdvancedRulesDialog({
         field_name: fieldName,
         prompt: config.regexPrompt,
       });
+      console.log(data);
       setConfig((current) => ({ ...current, regex: data.regex }));
     } catch (err) {
       setGenError(getApiErrorMessage(err, "Could not generate a rule"));

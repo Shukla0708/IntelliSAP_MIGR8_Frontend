@@ -121,26 +121,27 @@ export function ValidationRulesTable({
           <span className="text-xs text-on-surface-variant">{fields.length} columns detected</span>
         </div>
 
-        <div className="-mx-4 overflow-x-auto sm:-mx-6">
-          <table className="w-full min-w-[900px] border-collapse text-left">
-            <thead>
-              <tr className="border-b border-outline-variant bg-surface-container-low">
-                <th className="px-4 py-3 font-mono text-xs font-medium tracking-wider text-on-surface-variant uppercase">
-                  Field Name
-                </th>
-                {RULE_COLUMNS.map((column) => (
-                  <th
-                    key={column.key}
-                    className="px-4 py-3 text-center font-mono text-xs font-medium tracking-wider text-on-surface-variant uppercase"
-                  >
-                    {column.label}
+        <div className="-mx-4 sm:-mx-6">
+          <div className="max-h-[min(70vh,36rem)] overflow-auto rounded-lg border border-outline-variant/40">
+            <table className="w-full min-w-[900px] border-collapse text-left">
+              <thead>
+                <tr className="border-b border-outline-variant">
+                  <th className="sticky top-0 z-20 bg-surface-container-low px-4 py-3 font-mono text-xs font-medium tracking-wider text-on-surface-variant uppercase shadow-sm">
+                    Field Name
                   </th>
-                ))}
-                <th className="px-4 py-3 font-mono text-xs font-medium tracking-wider text-on-surface-variant uppercase">
-                  Configure Rules
-                </th>
-              </tr>
-            </thead>
+                  {RULE_COLUMNS.map((column) => (
+                    <th
+                      key={column.key}
+                      className="sticky top-0 z-20 bg-surface-container-low px-4 py-3 text-center font-mono text-xs font-medium tracking-wider text-on-surface-variant uppercase shadow-sm"
+                    >
+                      {column.label}
+                    </th>
+                  ))}
+                  <th className="sticky top-0 z-20 bg-surface-container-low px-4 py-3 font-mono text-xs font-medium tracking-wider text-on-surface-variant uppercase shadow-sm">
+                    Configure Rules
+                  </th>
+                </tr>
+              </thead>
             <tbody className="divide-y divide-outline-variant/30 text-[13px] leading-[18px] text-on-surface">
               {rows.map((row) => (
                 <tr key={row.id} className="transition-colors hover:bg-surface-container-low/50">
@@ -190,6 +191,7 @@ export function ValidationRulesTable({
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
 
