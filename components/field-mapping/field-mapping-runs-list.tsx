@@ -1,11 +1,17 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
 import { SectionCard } from "@/components/dashboard/kpi-card";
+import { ProjectPickerDialog } from "@/components/projects/project-picker-dialog";
 import { AddIcon, HubIcon } from "@/components/ui/icons";
+import { useProject } from "@/contexts/project-context";
 import type {
   FieldMappingRun,
   FieldMappingRunStatus,
 } from "@/data/field-mapping";
 import { PREVIOUS_FIELD_MAPPING_RUNS } from "@/data/field-mapping";
+
 const statusStyles: Record<
   FieldMappingRunStatus,
   { label: string; className: string }
@@ -31,6 +37,9 @@ type FieldMappingRunsListProps = {
 export function FieldMappingRunsList({
   runs = PREVIOUS_FIELD_MAPPING_RUNS,
 }: FieldMappingRunsListProps) {
+  const { selectedProject } = useProject();
+  const [pickerOpen, setPickerOpen] = useState(false);
+
   return (
     <div className="mx-auto w-full max-w-[1200px]">
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -39,17 +48,27 @@ export function FieldMappingRunsList({
             Field Mapping
           </h2>
           <p className="max-w-2xl text-base leading-6 text-on-surface-variant">
-            Review previous field mapping runs for this migration project, or
-            start a new mapping.
+            Review previous field mapping runs
+            {selectedProject ? ` for "${selectedProject.name}"` : " for this migration project"}
+            , or start a new mapping.
+          </p>
+          <p className="mt-2 text-sm">
+            <Link
+              href="/activity/mappings"
+              className="font-semibold text-primary hover:underline"
+            >
+              View all projects&apos; field mappings
+            </Link>
           </p>
         </div>
-        <Link
-          href="/field-mapping/new"
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
           className="inline-flex h-11 shrink-0 items-center justify-center gap-2 self-start rounded border border-transparent bg-primary-container px-4 text-base font-semibold leading-7 text-on-primary shadow-ambient transition-colors hover:bg-primary hover:shadow-md sm:self-auto"
         >
           <AddIcon className="h-4 w-4" />
           New Field Mapping
-        </Link>
+        </button>
       </div>
 
       <SectionCard className="overflow-hidden">
@@ -110,6 +129,14 @@ export function FieldMappingRunsList({
           })}
         </div>
       </SectionCard>
+
+      <ProjectPickerDialog
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        targetHref="/field-mapping/new"
+        title="New Field Mapping — choose project"
+        description="Pick the project this mapping belongs to."
+      />
     </div>
   );
 }

@@ -259,6 +259,14 @@ export function ArrowForwardIcon({ className = "h-5 w-5" }: IconProps) {
   );
 }
 
+export function ExpandMoreIcon({ className = "h-5 w-5" }: IconProps) {
+  return (
+    <svg {...baseIconProps(className)}>
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
 export function MenuIcon({ className = "h-5 w-5" }: IconProps) {
   return (
     <svg {...baseIconProps(className)}>

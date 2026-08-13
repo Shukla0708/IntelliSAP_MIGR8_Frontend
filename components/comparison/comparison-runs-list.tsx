@@ -1,6 +1,11 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
 import { SectionCard } from "@/components/dashboard/kpi-card";
+import { ProjectPickerDialog } from "@/components/projects/project-picker-dialog";
 import { AddIcon, CompareIcon } from "@/components/ui/icons";
+import { useProject } from "@/contexts/project-context";
 import type { ComparisonRun, ComparisonRunStatus } from "@/data/comparison";
 import { PREVIOUS_COMPARISON_RUNS } from "@/data/comparison";
 
@@ -29,6 +34,9 @@ type ComparisonRunsListProps = {
 export function ComparisonRunsList({
   runs = PREVIOUS_COMPARISON_RUNS,
 }: ComparisonRunsListProps) {
+  const { selectedProject } = useProject();
+  const [pickerOpen, setPickerOpen] = useState(false);
+
   return (
     <div className="mx-auto w-full max-w-[1200px]">
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -37,17 +45,27 @@ export function ComparisonRunsList({
             Comparison
           </h2>
           <p className="max-w-2xl text-base leading-6 text-on-surface-variant">
-            Review previous postload vs preload comparison runs for this
-            migration project, or start a new comparison.
+            Review previous postload vs preload comparison runs
+            {selectedProject ? ` for "${selectedProject.name}"` : " for this migration project"}
+            , or start a new comparison.
+          </p>
+          <p className="mt-2 text-sm">
+            <Link
+              href="/activity/comparisons"
+              className="font-semibold text-primary hover:underline"
+            >
+              View all projects&apos; comparisons
+            </Link>
           </p>
         </div>
-        <Link
-          href="/compare/new"
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
           className="inline-flex h-11 shrink-0 items-center justify-center gap-2 self-start rounded border border-transparent bg-primary-container px-4 text-base font-semibold leading-7 text-on-primary shadow-ambient transition-colors hover:bg-primary hover:shadow-md sm:self-auto"
         >
           <AddIcon className="h-4 w-4" />
           New Comparison
-        </Link>
+        </button>
       </div>
 
       <SectionCard className="overflow-hidden">
@@ -108,6 +126,14 @@ export function ComparisonRunsList({
           })}
         </div>
       </SectionCard>
+
+      <ProjectPickerDialog
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        targetHref="/compare/new"
+        title="New Comparison — choose project"
+        description="Pick the project this comparison belongs to."
+      />
     </div>
   );
 }

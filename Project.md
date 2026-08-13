@@ -12,9 +12,9 @@
 | Package name | `migr8-ai-frontend` |
 | Repo path | `MIGR8_AI_frontend/` (workspace: `MIGR8 AI frontend`) |
 | Purpose | Frontend for MIGR8 AI — SAP data migration assistant (UI from Google Stitch) |
-| Status | JWT auth + protected routes; projects + validation wired to FastAPI via axios; field-mapping / comparison mostly mock |
+| Status | Dual-scope nav: **Activity** (all my projects) + **Current project** tools; JWT auth; validation live; field-mapping / comparison mostly mock |
 | Design source | Stitch project **Remix of MIGR8 AI Migration Assistant** (`11703829461598989849`) |
-| Git | `main` — UI flows + axios; auth/validation/projects API wiring |
+| Git | `main` — UI flows + axios; auth/validation/projects API wiring; dual-scope Activity hubs |
 | API base | `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8000`) |
 | Auth storage | `localStorage` key `migr8_token` |
 
@@ -41,7 +41,8 @@
 - No `src/` directory — app lives at project root (`app/`)
 - No third-party UI kit (custom components only)
 - No state library or testing setup yet
-- Auth is real (JWT via FastAPI); domain screens (validation/mapping/compare) still use mock/static data
+- Auth is real (JWT via FastAPI); domain screens (validation live; mapping/compare still mock/static for project lists)
+- **Dual-scope IA:** browse globally under Activity; create/execute always project-bound via selected project + picker
 
 ---
 
@@ -54,53 +55,62 @@ Public (no JWT): `/sign-in`, `/register`. All other product routes live under `a
 | `/` | `app/page.tsx` | — | Redirects to `/dashboard` (also middleware-protected) |
 | `/sign-in` | `app/sign-in/page.tsx` | `SignInCard` + `SystemStatus` | Public; real JWT login |
 | `/register` | `app/register/page.tsx` | `RegisterCard` | Public; real JWT register |
-| `/dashboard` | `app/(app)/dashboard/page.tsx` | `DashboardView` | Protected; uses `AppShell` |
+| `/dashboard` | `app/(app)/dashboard/page.tsx` | `DashboardView` | Global KPIs + recent activity (live validations) |
 | `/projects` | `app/(app)/projects/page.tsx` | `ProjectsView` | Protected |
-| `/compare` | `app/(app)/compare/page.tsx` | `ComparisonRunsList` | Prior runs + **New Comparison** |
+| `/activity/validations` | `app/(app)/activity/validations/page.tsx` | `ActivityValidationsList` | All my validations; Project column + filters |
+| `/activity/comparisons` | `app/(app)/activity/comparisons/page.tsx` | `ActivityComparisonsList` | Cross-project comparisons (mock until API) |
+| `/activity/mappings` | `app/(app)/activity/mappings/page.tsx` | `ActivityMappingsList` | Cross-project mappings (mock until API) |
+| `/activity/reports` | `app/(app)/activity/reports/page.tsx` | `ActivityReportsList` | Stub |
+| `/compare` | `app/(app)/compare/page.tsx` | `ComparisonRunsList` | Project-scoped prior runs + **New Comparison** |
 | `/compare/new` | `app/(app)/compare/new/page.tsx` | `ComparisonSetupView` | Reconciliation upload; from New Comparison |
 | `/compare/[id]` | `app/(app)/compare/[id]/page.tsx` | `ReconciliationReviewView` | Exception review; `generateStaticParams` |
-| `/field-mapping` | `app/(app)/field-mapping/page.tsx` | `FieldMappingRunsList` | Prior runs + **New Field Mapping** |
+| `/field-mapping` | `app/(app)/field-mapping/page.tsx` | `FieldMappingRunsList` | Project-scoped prior runs + **New Field Mapping** |
 | `/field-mapping/new` | `app/(app)/field-mapping/new/page.tsx` | `FieldMappingSetupView` + `SchemaUploadPanel` | Source/target upload + SAP fetch; topbar title |
 | `/field-mapping/[id]` | `app/(app)/field-mapping/[id]/page.tsx` | `FieldMappingWorkspaceView` | Multi-prospect mapping workspace; `generateStaticParams` |
-| `/validation` | `app/(app)/validation/page.tsx` | `ValidationRunsList` | Prior runs + **New Validation** |
+| `/validation` | `app/(app)/validation/page.tsx` | `ValidationRunsList` | Project-scoped prior runs + **New Validation** |
 | `/validation/new` | `app/(app)/validation/new/page.tsx` | `AdvancedValidationView` | Run name + rules table + upload zone |
 | `/validation_result/[id]` | `app/(app)/validation_result/[id]/page.tsx` | `ValidationResultsView` | Per-run results; `generateStaticParams` |
 
 ### App shell UX
 
-1. User lands on **Dashboard** (`/dashboard`).
+1. User lands on **Dashboard** (`/dashboard`) — global control center across all owned projects.
 2. Sidebar / topbar stay mounted via `AppShell`.
 3. Clicking a nav item replaces **main content only**.
 4. Sidebar active state is derived from `usePathname()` + `matchPrefixes` (not hard-coded).
 5. **Mobile:** sidebar is hidden on small screens; hamburger opens a drawer overlay (`AppShell` state).
-6. **Validation flow:**
-   - `/validation` (runs list) → click a prior run → `/validation_result/{run.id}`
-   - `/validation` → **New Validation** → `/validation/new` (unique run name → upload → rules) → **Run Validation Rules** → `/validation_result/{run.id}`
-7. **Field Mapping flow:**
-   - `/field-mapping` (runs list) → click a prior run → `/field-mapping/{run.id}`
-   - `/field-mapping` → **New Field Mapping** → `/field-mapping/new` → **Start Mapping** → `/field-mapping/map-new`
-8. **Comparison flow:**
-   - `/compare` (runs list) → click a prior run → `/compare/{run.id}`
-   - `/compare` → **New Comparison** → `/compare/new` → **Run Reconciliation** → `/compare/cmp-new`
-9. Validation sidebar item stays active on `/validation*` and `/validation_result*`.
-10. Field Mapping sidebar item stays active on `/field-mapping*`.
-11. Comparison sidebar item stays active on `/compare*`.
+6. **Dual scope:**
+   - **Activity** — browse validations / comparisons / mappings / reports across all owned projects.
+   - **Current project** — tools for the selected project (switcher in sidebar).
+7. **Validation flow:**
+   - Project: `/validation` → `/validation_result/{id}` or **New Validation** (project picker) → `/validation/new`
+   - Global: `/activity/validations` → same detail routes; **New Validation** opens project picker first
+8. **Field Mapping flow:**
+   - `/field-mapping` or `/activity/mappings` → detail `/field-mapping/{id}`; create gated by project picker → `/field-mapping/new` → `/field-mapping/map-new`
+9. **Comparison flow:**
+   - `/compare` or `/activity/comparisons` → detail `/compare/{id}`; create gated by project picker → `/compare/new` → `/compare/cmp-new`
+10. Validation sidebar (project) stays active on `/validation*` and `/validation_result*`.
+11. Activity → Validations stays active on `/activity/validations*`.
+12. Field Mapping / Comparison project + activity items use their respective prefixes.
 
 ### Sidebar nav labels (current)
 
-Defined in `data/dashboard.ts` (`SIDEBAR_NAV`, `SIDEBAR_FOOTER_NAV`); rendered in `components/layout/app-sidebar.tsx`:
+Defined in `data/dashboard.ts` (`SIDEBAR_OVERVIEW`, `SIDEBAR_ACTIVITY`, `SIDEBAR_PROJECT_TOOLS`, `SIDEBAR_FOOTER_NAV`); rendered in `components/layout/app-sidebar.tsx`:
 
-| Label | Href |
-| --- | --- |
-| **Projects** (top button) | — (mock; no route yet) |
-| Dashboard | `/dashboard` |
-| Project 1 | `#` (parent) |
-| → Validation | `/validation` (+ `/validation_result/*`) |
-| → Comparison(Postload <-> Preload) | `/compare` |
-| → Field Mapping | `/field-mapping` |
-| → Reports | `#` (TBD) |
-| Profile | `#` (TBD) |
-| Settings | `#` (TBD) |
+| Section | Label | Href |
+| --- | --- | --- |
+| CTA | **Projects** | `/projects` |
+| Overview | Dashboard | `/dashboard` |
+| Activity | Validations | `/activity/validations` |
+| Activity | Comparisons | `/activity/comparisons` |
+| Activity | Field Mapping | `/activity/mappings` |
+| Activity | Reports | `/activity/reports` |
+| Current project | *(project switcher dropdown)* | selects `migr8_selected_project_id` |
+| Current project | Validation | `/validation` (+ `/validation_result/*`) |
+| Current project | Comparison | `/compare` |
+| Current project | Field Mapping | `/field-mapping` |
+| Current project | Reports | `#` (TBD) |
+| Footer | Profile | menu (logout) |
+| Footer | Settings | `#` (TBD) |
 
 ### Mock validation run IDs
 
@@ -174,6 +184,11 @@ MIGR8_AI_frontend/
 │   │   ├── layout.tsx
 │   │   ├── dashboard/page.tsx
 │   │   ├── projects/page.tsx
+│   │   ├── activity/
+│   │   │   ├── validations/
+│   │   │   ├── comparisons/
+│   │   │   ├── mappings/
+│   │   │   └── reports/
 │   │   ├── compare/
 │   │   ├── field-mapping/
 │   │   ├── validation/
@@ -188,11 +203,16 @@ MIGR8_AI_frontend/
 │   │   ├── register-card.tsx
 │   │   ├── register-form.tsx    # POST /api/auth/register
 │   │   └── system-status.tsx    # Sign-in page footer status strip
+│   ├── activity/
+│   │   ├── activity-validations-list.tsx
+│   │   ├── activity-comparisons-list.tsx
+│   │   ├── activity-mappings-list.tsx
+│   │   └── activity-reports-list.tsx
 │   ├── providers.tsx            # AuthProvider → ProjectProvider
 │   ├── brand/
 │   │   └── migr8-logo.tsx       # Uses /brand/migr8-logo.png
 │   ├── dashboard/
-│   │   ├── dashboard-view.tsx
+│   │   ├── dashboard-view.tsx   # Live KPIs + recent activity (client)
 │   │   ├── kpi-card.tsx         # KPI cards + SectionCard
 │   │   ├── recent-projects.tsx
 │   │   └── migration-readiness.tsx
@@ -219,7 +239,8 @@ MIGR8_AI_frontend/
 │   │   └── app-topbar.tsx
 │   ├── projects/
 │   │   ├── projects-view.tsx
-│   │   └── create-project-dialog.tsx
+│   │   ├── create-project-dialog.tsx
+│   │   └── project-picker-dialog.tsx  # Gate create flows to a project
 │   ├── providers.tsx            # AuthProvider → ProjectProvider
 │   └── ui/
 │       ├── button.tsx
@@ -289,11 +310,21 @@ await apiClient.post("/api/auth/login", { email, password });
 | Area | Status |
 | --- | --- |
 | Auth (`/sign-in`, `/register`, `/api/auth/me`) | Live |
-| Projects (`/projects` list + create) | Live via `ProjectProvider` |
+| Projects (`/projects` list + create + sidebar switcher) | Live via `ProjectProvider` |
 | Validation list / upload / rules / execute / results / download | Live |
-| Field mapping / comparison | UI mock (friend's screens) |
+| Activity validations (`GET /api/runs/`) | Live cross-project for current user |
+| Dashboard KPIs / recent activity | Live for projects + validations; compare/mapping still mock-augmented |
+| Field mapping / comparison (project + activity lists) | UI mock (friend's screens) until APIs exist |
 
-`AppProviders` wraps `AuthProvider` → `ProjectProvider`. Validation uses `useDefaultProject()` which reads the selected project from context.
+`AppProviders` wraps `AuthProvider` → `ProjectProvider`. Validation uses `useDefaultProject()` which reads the selected project from context. **Browse** can be global; **create** always confirms a project via `ProjectPickerDialog`.
+
+### Cross-project runs
+
+| Item | Value |
+| --- | --- |
+| List all | `GET /api/runs/?project_id=&limit=&offset=` |
+| Scope | Current JWT user only (join through owned projects) |
+| Card fields | `id`, `name`, `records`, `ranAt`, `status`, `errors`, `project_id`, `project_name` |
 
 ### Validation run create contract
 
@@ -386,6 +417,15 @@ npm run lint     # ESLint
 ---
 
 ## Session Log
+
+### 2026-08-13 — Dual-scope nav (Project work + Global activity)
+
+- Sidebar: **Overview** (Dashboard) + **Activity** (all my validations/comparisons/mappings/reports) + **Current project** tools with inline project switcher.
+- Backend: `GET /api/runs/` lists current user’s validation runs across projects (`project_id` / `project_name`, optional filter).
+- `/activity/validations` live list with Project column, search, project filter; compare/mapping/reports activity pages (mock/stub).
+- `ProjectPickerDialog` gates **New** create flows so work always lands under an explicit project.
+- Dashboard wired to live project + validation aggregates; recent activity feed; View All → `/projects`.
+- Project-scoped lists link to “View all projects’ …” activity hubs.
 
 ### 2026-08-13 — Unique validation run names
 
@@ -531,24 +571,27 @@ npm run lint     # ESLint
 4. **Stitch is UI source of truth** — match layout, spacing, typography, and color from Stitch HTML/screenshots.
 5. **Shared app chrome** — authenticated product screens use `AppShell`; nav stays while main content swaps.
 6. **Reuse before inventing** — extend existing `components/ui` and layout pieces; avoid duplicate components.
-7. **Auth is real; domain data still mock** — use `useAuth` + Bearer token for APIs; keep fixtures in `data/` until domain endpoints are wired.
+7. **Auth is real; domain data still mock where APIs missing** — use `useAuth` + Bearer token for APIs; keep fixtures in `data/` until domain endpoints are wired.
 8. **Page → view split** — route files stay thin (`metadata` + `AppShell` wrapper); screen logic lives in `components/*/`-view files.
 9. **Single axios instance** — import `apiClient` from `@/lib/axios`; do not create ad-hoc axios instances elsewhere.
 10. **Protected product routes** — put authenticated pages under `app/(app)/`; keep `/sign-in` and `/register` public.
 11. **Selected project is global** — `ProjectProvider` is source of truth; validation must not invent a parallel project ID.
 12. **Validation run names are user-provided and unique per project** — UI requires `name` on create; backend must enforce uniqueness (prefer `409` on conflict).
-13. **Keep `Project.md` current** — after meaningful changes, update structure/routes/decisions and append a session log entry.
-14. Prefer small, focused changes over broad refactors unless requested.
+13. **Dual-scope IA** — Activity hubs browse across all owned projects; Current project tools do day-to-day work; create/execute always requires an explicit project (picker or selected).
+14. **Global lists are per signed-in user only** — no cross-user/org sharing until a sharing model exists.
+15. **Keep `Project.md` current** — after meaningful changes, update structure/routes/decisions and append a session log entry.
+16. Prefer small, focused changes over broad refactors unless requested.
 
 ---
 
 ## Open Questions / TBD
 
-- Wire remaining sidebar routes: Reports, Settings
-- Wire domain screens to FastAPI (projects, validation, mapping, compare)
-- Backend: require `name` on `POST /api/runs/` + unique `(project_id, name)` (frontend already sends `{ name }`)
+- Wire remaining sidebar routes: project Reports, Settings
+- Wire compare/mapping APIs; replace activity mock lists
 - httpOnly cookie / refresh tokens (currently Bearer + readable cookie for middleware)
 - Remove dead validation mock fixtures after cutover
+- Optional nested URLs `/projects/[id]/validation` later (flat routes + context for now)
+- Team/org sharing (out of scope for current per-user model)
 - Deployment target
 - Testing strategy
 

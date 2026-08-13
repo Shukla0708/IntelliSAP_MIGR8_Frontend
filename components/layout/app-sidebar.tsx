@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ComponentType } from "react";
+import { useEffect, useRef, useState, type ComponentType } from "react";
 import {
   AccountCircleIcon,
   AnalyticsIcon,
   CompareIcon,
   DashboardIcon,
   DatasetIcon,
+  ExpandMoreIcon,
   HubIcon,
   RuleIcon,
   SettingsIcon,
@@ -16,8 +17,10 @@ import {
 import { ProfileMenu } from "@/components/layout/profile-menu";
 import { useProject } from "@/contexts/project-context";
 import {
+  SIDEBAR_ACTIVITY,
   SIDEBAR_FOOTER_NAV,
-  SIDEBAR_NAV,
+  SIDEBAR_OVERVIEW,
+  SIDEBAR_PROJECT_TOOLS,
   type NavItem,
 } from "@/data/dashboard";
 
@@ -62,6 +65,22 @@ function NavLink({
     ? "border-r-4 border-primary bg-primary-container/10 font-bold text-primary opacity-80"
     : "text-on-surface-variant hover:bg-surface-container-high";
 
+  if (!item.href || item.href === "#") {
+    return (
+      <span
+        className={[
+          "flex items-center gap-4 rounded-lg px-4 py-2 text-on-surface-variant",
+          nested ? "" : "",
+        ].join(" ")}
+      >
+        <Icon className={nested ? "h-4 w-4" : "h-5 w-5"} />
+        <span className="text-xs font-semibold uppercase tracking-[0.02em] leading-4">
+          {item.label}
+        </span>
+      </span>
+    );
+  }
+
   return (
     <Link
       href={item.href}
@@ -80,21 +99,112 @@ function NavLink({
   );
 }
 
-function withSelectedProjectLabel(items: NavItem[], projectName: string) {
-  return items.map((item) =>
-    item.children
-      ? { ...item, label: projectName }
-      : item,
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <p className="mb-1 px-4 pt-3 text-[10px] font-bold uppercase tracking-[0.08em] text-outline">
+      {children}
+    </p>
+  );
+}
+
+function ProjectSwitcher({ onNavigate }: { onNavigate?: () => void }) {
+  const { projects, selectedProject, selectProject, loading } = useProject();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative mb-1 px-2">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-left transition-colors hover:bg-surface-container-high"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+      >
+        <DatasetIcon className="h-4 w-4 shrink-0 text-primary" />
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-[0.02em] leading-4 text-on-surface">
+          {loading
+            ? "Loading…"
+            : selectedProject?.name ?? "Select a project"}
+        </span>
+        <ExpandMoreIcon
+          className={`h-4 w-4 shrink-0 text-on-surface-variant transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {open ? (
+        <div
+          role="listbox"
+          className="absolute left-2 right-2 z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-outline-variant bg-surface-container-lowest py-1 shadow-lg"
+        >
+          {projects.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-on-surface-variant">
+              No projects yet.{" "}
+              <Link
+                href="/projects"
+                onClick={() => {
+                  setOpen(false);
+                  onNavigate?.();
+                }}
+                className="font-semibold text-primary hover:underline"
+              >
+                Create one
+              </Link>
+            </p>
+          ) : (
+            projects.map((project) => {
+              const selected = project.id === selectedProject?.id;
+              return (
+                <button
+                  key={project.id}
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  onClick={() => {
+                    selectProject(project.id);
+                    setOpen(false);
+                  }}
+                  className={[
+                    "flex w-full items-center px-3 py-2 text-left text-xs font-semibold leading-4 transition-colors",
+                    selected
+                      ? "bg-primary-container/10 text-primary"
+                      : "text-on-surface hover:bg-surface-container-high",
+                  ].join(" ")}
+                >
+                  <span className="truncate">{project.name}</span>
+                </button>
+              );
+            })
+          )}
+          <Link
+            href="/projects"
+            onClick={() => {
+              setOpen(false);
+              onNavigate?.();
+            }}
+            className="mt-1 flex w-full border-t border-outline-variant px-3 py-2 text-xs font-semibold text-primary hover:bg-surface-container-high"
+          >
+            Manage projects
+          </Link>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
 export function AppSidebar({ className = "", onNavigate }: AppSidebarProps) {
   const pathname = usePathname();
-  const { selectedProject } = useProject();
-  const navItems = withSelectedProjectLabel(
-    SIDEBAR_NAV,
-    selectedProject?.name ?? "Migration Projects",
-  );
 
   return (
     <nav
@@ -123,7 +233,7 @@ export function AppSidebar({ className = "", onNavigate }: AppSidebarProps) {
         href="/projects"
         onClick={onNavigate}
         className={[
-          "mb-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded border border-transparent bg-primary-container px-4 text-base font-semibold leading-7 text-on-primary shadow-ambient transition-colors hover:bg-primary hover:shadow-md",
+          "mb-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded border border-transparent bg-primary-container px-4 text-base font-semibold leading-7 text-on-primary shadow-ambient transition-colors hover:bg-primary hover:shadow-md",
           pathname === "/projects" || pathname.startsWith("/projects/")
             ? "ring-2 ring-primary/30"
             : "",
@@ -132,29 +242,49 @@ export function AppSidebar({ className = "", onNavigate }: AppSidebarProps) {
         Projects
       </Link>
 
-      <div className="flex-1 space-y-1 overflow-y-auto">
-        {navItems.map((item) => (
-          <div key={item.label} className="space-y-1">
+      <div className="flex-1 space-y-2 overflow-y-auto">
+        <div>
+          <SectionLabel>Overview</SectionLabel>
+          {SIDEBAR_OVERVIEW.map((item) => (
             <NavLink
+              key={item.href}
               item={item}
               active={isActivePath(pathname, item)}
               onNavigate={onNavigate}
             />
-            {item.children ? (
-              <div className="ml-4 space-y-1 border-l border-outline-variant/30 pl-2">
-                {item.children.map((child) => (
-                  <NavLink
-                    key={child.label}
-                    item={child}
-                    nested
-                    active={isActivePath(pathname, child)}
-                    onNavigate={onNavigate}
-                  />
-                ))}
-              </div>
-            ) : null}
+          ))}
+        </div>
+
+        <div>
+          <SectionLabel>Activity</SectionLabel>
+          <div className="space-y-1">
+            {SIDEBAR_ACTIVITY.map((item) => (
+              <NavLink
+                key={item.href}
+                item={item}
+                nested
+                active={isActivePath(pathname, item)}
+                onNavigate={onNavigate}
+              />
+            ))}
           </div>
-        ))}
+        </div>
+
+        <div>
+          <SectionLabel>Current project</SectionLabel>
+          <ProjectSwitcher onNavigate={onNavigate} />
+          <div className="ml-2 space-y-1 border-l border-outline-variant/30 pl-2">
+            {SIDEBAR_PROJECT_TOOLS.map((item) => (
+              <NavLink
+                key={`${item.label}-${item.href}`}
+                item={item}
+                nested
+                active={isActivePath(pathname, item)}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="mt-auto space-y-1 overflow-visible border-t border-outline-variant pt-6">

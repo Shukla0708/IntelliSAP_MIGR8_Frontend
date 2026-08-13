@@ -15,32 +15,90 @@ export type NavItem = {
   children?: NavItem[];
 };
 
-export const SIDEBAR_NAV: NavItem[] = [
+export type NavSection = {
+  id: "overview" | "activity" | "project";
+  label: string;
+  items: NavItem[];
+};
+
+/** Global overview — not tied to a selected project */
+export const SIDEBAR_OVERVIEW: NavItem[] = [
   {
     label: "Dashboard",
     href: "/dashboard",
     icon: "dashboard",
   },
+];
+
+/** Cross-project activity (current user's runs across all projects) */
+export const SIDEBAR_ACTIVITY: NavItem[] = [
+  {
+    label: "Validations",
+    href: "/activity/validations",
+    icon: "rule",
+    matchPrefixes: ["/activity/validations"],
+  },
+  {
+    label: "Comparisons",
+    href: "/activity/comparisons",
+    icon: "compare",
+    matchPrefixes: ["/activity/comparisons"],
+  },
+  {
+    label: "Field Mapping",
+    href: "/activity/mappings",
+    icon: "hub",
+    matchPrefixes: ["/activity/mappings"],
+  },
+  {
+    label: "Reports",
+    href: "/activity/reports",
+    icon: "analytics",
+    matchPrefixes: ["/activity/reports"],
+  },
+];
+
+/** Tools scoped to the currently selected project */
+export const SIDEBAR_PROJECT_TOOLS: NavItem[] = [
+  {
+    label: "Validation",
+    href: "/validation",
+    icon: "rule",
+    matchPrefixes: ["/validation", "/validation_result"],
+  },
+  {
+    label: "Comparison",
+    href: "/compare",
+    icon: "compare",
+    matchPrefixes: ["/compare"],
+  },
+  {
+    label: "Field Mapping",
+    href: "/field-mapping",
+    icon: "hub",
+    matchPrefixes: ["/field-mapping"],
+  },
+  {
+    label: "Reports",
+    href: "#",
+    icon: "analytics",
+  },
+];
+
+/** @deprecated Prefer SIDEBAR_OVERVIEW / SIDEBAR_ACTIVITY / SIDEBAR_PROJECT_TOOLS */
+export const SIDEBAR_NAV: NavItem[] = [
+  ...SIDEBAR_OVERVIEW,
+  {
+    label: "Activity",
+    href: "#",
+    icon: "analytics",
+    children: SIDEBAR_ACTIVITY,
+  },
   {
     label: "Project 1",
     href: "#",
     icon: "dataset",
-    children: [
-      {
-        label: "Validation",
-        href: "/validation",
-        icon: "rule",
-        matchPrefixes: ["/validation", "/validation_result"],
-      },
-      {
-        label: "Comparison(Postload <-> Preload)",
-        href: "/compare",
-        icon: "compare",
-        matchPrefixes: ["/compare"],
-      },
-      { label: "Field Mapping", href: "/field-mapping", icon: "hub", matchPrefixes: ["/field-mapping"] },
-      { label: "Reports", href: "#", icon: "analytics" },
-    ],
+    children: SIDEBAR_PROJECT_TOOLS,
   },
 ];
 
