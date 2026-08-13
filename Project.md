@@ -273,8 +273,10 @@ MIGR8_AI_frontend/
 │   │   ├── validation-rules-table.tsx
 │   │   ├── advanced-rules-dialog.tsx   # Define Rules modal
 │   │   └── validation-results-view.tsx
+│   ├── chat/
+│   │   └── results-chat-drawer.tsx  # Floating results assistant
 │   ├── layout/
-│   │   ├── app-shell.tsx        # Sidebar + topbar + mobile drawer
+│   │   ├── app-shell.tsx        # Sidebar + topbar + mobile drawer + chat
 │   │   ├── app-sidebar.tsx
 │   │   └── app-topbar.tsx
 │   ├── projects/
@@ -314,6 +316,7 @@ MIGR8_AI_frontend/
 │   ├── auth-types.ts            # AuthUser / AuthResponse types
 │   ├── parse-source-headers.ts  # Client-side Excel/CSV header extraction for validation
 │   ├── project-report-api.ts    # fetchProjectReport — API + mock compare/map merge
+│   ├── chat-api.ts              # POST /api/chat grounded results assistant
 │   ├── validation-api.ts        # fetch/create/upload/rules/execute helpers
 │   ├── validation-routes.ts     # validationRunHref + isEditableValidationStatus
 │   └── use-default-project.ts   # Selected project for validation create flows
@@ -478,6 +481,11 @@ npm run lint     # ESLint
 ---
 
 ## Session Log
+
+### 2026-08-13 — Results chatbot drawer
+
+- Floating assistant in `AppShell` (`components/chat/results-chat-drawer.tsx`) calls `POST /api/chat/` with page context (dashboard / report / validation result / mapping result).
+- Answers are grounded in backend-packed results; off-topic questions are refused.
 
 ### 2026-08-13 — Field mapping workspace: single approve action, key-field/approved badges, live AI review, manual-picker popup
 

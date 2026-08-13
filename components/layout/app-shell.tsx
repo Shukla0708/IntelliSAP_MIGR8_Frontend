@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { ResultsChatDrawer } from "@/components/chat/results-chat-drawer";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppTopbar } from "@/components/layout/app-topbar";
 import { CloseIcon } from "@/components/ui/icons";
@@ -55,6 +56,7 @@ export function AppShell({
             onMenuClick={() => setMobileOpen(true)}
           />
           <main className={mainClassName}>{children}</main>
+          <ResultsChatDrawer />
         </div>
     </div>
   );

@@ -442,3 +442,19 @@ export function CheckIcon({ className = "h-5 w-5" }: IconProps) {
     </svg>
   );
 }
+
+export function ChatIcon({ className = "h-5 w-5" }: IconProps) {
+  return (
+    <svg {...baseIconProps(className)}>
+      <path d="M5 6h14v10H8l-3 3V6Z" />
+    </svg>
+  );
+}
+
+export function SendIcon({ className = "h-5 w-5" }: IconProps) {
+  return (
+    <svg {...baseIconProps(className)}>
+      <path d="M4 12l16-7-7 16-2-6-7-3Z" />
+    </svg>
+  );
+}
