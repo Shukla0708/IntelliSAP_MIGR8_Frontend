@@ -8,7 +8,11 @@ export type FieldMappingRowIcon = "tag" | "mail" | "phone";
 export type MappingProspect = {
   id: string;
   targetField: string;
+  targetDescription?: string | null;
   confidence: number;
+  semanticSimilarity?: number | null;
+  datatypeMatch?: number | null;
+  reasoning?: string | null;
 };
 
 export type FieldMappingRow = {
@@ -18,6 +22,12 @@ export type FieldMappingRow = {
   status: "mapped" | "unmapped";
   prospects: MappingProspect[];
   selectedProspectId: string | null;
+  /** Source field was flagged as a key field in the uploaded source file. */
+  keyField?: boolean;
+  /** Internal number range was chosen for a key field — AI won't pre-map it. */
+  requiresManualMapping?: boolean;
+  /** This row's mapping has already been confirmed in a prior "Approve Mapping". */
+  confirmed?: boolean;
   aiReview: {
     confidence: number;
     semanticSimilarity: number;

@@ -1,41 +1,56 @@
-import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import { FieldMappingWorkspaceView } from "@/components/field-mapping/field-mapping-workspace-view";
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
-import {
-  getAllFieldMappingWorkspaceIds,
-  getFieldMappingRunLabel,
-  getFieldMappingWorkspace,
-} from "@/data/field-mapping-workspace";
+import { FieldMappingWorkspaceView } from "@/components/field-mapping/field-mapping-workspace-view";
+import type { FieldMappingWorkspace } from "@/data/field-mapping-workspace";
+import { getApiErrorMessage } from "@/lib/axios";
+import { fetchMappingRunResult, toFieldMappingWorkspace } from "@/lib/mapping-api";
+import { useDefaultProject } from "@/lib/use-default-project";
 
-type FieldMappingWorkspacePageProps = {
-  params: Promise<{ id: string }>;
-};
+export default function FieldMappingWorkspacePage() {
+  const params = useParams<{ id: string }>();
+  const { project } = useDefaultProject();
+  const [workspace, setWorkspace] = useState<FieldMappingWorkspace | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-export function generateStaticParams() {
-  return getAllFieldMappingWorkspaceIds().map((id) => ({ id }));
-}
+  useEffect(() => {
+    let cancelled = false;
 
-export async function generateMetadata({
-  params,
-}: FieldMappingWorkspacePageProps): Promise<Metadata> {
-  const { id } = await params;
-  const runName = getFieldMappingRunLabel(id);
+    fetchMappingRunResult(params.id)
+      .then((result) => {
+        if (cancelled) return;
+        setWorkspace(
+          toFieldMappingWorkspace(result, project?.name ?? "Field Mapping"),
+        );
+      })
+      .catch((err) => {
+        if (!cancelled) setError(getApiErrorMessage(err, "Mapping run not found"));
+      });
 
-  return {
-    title: `${runName} | Field Mapping | MIGR8 AI`,
-    description:
-      "Review AI-suggested field mappings between source and SAP target schemas.",
-  };
-}
+    return () => {
+      cancelled = true;
+    };
+  }, [params.id, project?.name]);
 
-export default async function FieldMappingWorkspacePage({
-  params,
-}: FieldMappingWorkspacePageProps) {
-  const { id } = await params;
-  const workspace = getFieldMappingWorkspace(id);
+  if (error) {
+    return (
+      <AppShell topbarTitle="Field Mapping Results">
+        <p className="p-6 text-sm text-error">{error}</p>
+      </AppShell>
+    );
+  }
 
-  if (!workspace) notFound();
+  if (!workspace) {
+    return (
+      <AppShell topbarTitle="Field Mapping Results">
+        <p className="p-6 text-sm text-on-surface-variant">
+          Loading mapping run...
+        </p>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell

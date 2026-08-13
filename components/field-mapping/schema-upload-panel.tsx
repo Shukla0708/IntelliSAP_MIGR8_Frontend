@@ -26,7 +26,6 @@ export function SchemaUploadPanel({
   onFileSelected,
 }: SchemaUploadPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
   const [sapTableName, setSapTableName] = useState("");
   const Icon = iconMap[card.icon];
 
@@ -35,16 +34,14 @@ export function SchemaUploadPanel({
   }
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setFileName(file.name);
-    console.info(`${card.id} schema selected`, { name: file.name });
+    const selected = event.target.files?.[0];
+    if (!selected) return;
+    onFileSelected(selected);
   }
 
   function handleSapFetch() {
     if (!sapTableName.trim()) return;
     console.info("SAP table fetch clicked (mock)", { table: sapTableName });
-    setFileName(`${sapTableName.trim()}.xml`);
   }
 
   return (
@@ -77,7 +74,7 @@ export function SchemaUploadPanel({
         </Button>
 
         <p className="text-[13px] leading-[18px] text-outline">
-          {fileName ? `Selected: ${fileName}` : card.supportedFormats}
+          {file ? `Selected: ${file.name}` : card.supportedFormats}
         </p>
       </div>
 

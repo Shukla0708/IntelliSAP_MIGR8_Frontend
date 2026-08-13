@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ComponentType } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   ArrowForwardIcon,
@@ -14,11 +15,14 @@ import {
   TagIcon,
 } from "@/components/ui/icons";
 import { ProgressBar } from "@/components/ui/progress";
+import { Dialog } from "@/components/ui/dialog";
 import type {
   FieldMappingRow,
   FieldMappingRowIcon,
   FieldMappingWorkspace,
 } from "@/data/field-mapping-workspace";
+import { getApiErrorMessage } from "@/lib/axios";
+import { confirmMapping, type ConfirmMappingField } from "@/lib/mapping-api";
 
 type FieldMappingWorkspaceViewProps = {
   workspace: FieldMappingWorkspace;
@@ -108,6 +112,17 @@ function MappingTableRow({
         >
           {row.sourceField}
         </span>
+        {row.keyField ? (
+          <span className="inline-flex items-center gap-1 rounded border border-tertiary/30 bg-tertiary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.02em] text-tertiary">
+            Key Field
+          </span>
+        ) : null}
+        {row.confirmed ? (
+          <span className="inline-flex items-center gap-1 rounded border border-success/30 bg-success/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.02em] text-success">
+            <CheckIcon className="h-3 w-3" />
+            Approved
+          </span>
+        ) : null}
       </div>
 
       <div
@@ -124,7 +139,14 @@ function MappingTableRow({
         <ArrowForwardIcon className="h-4 w-4 text-outline-variant" />
       </div>
 
-      {row.status === "unmapped" ? (
+      {row.requiresManualMapping ? (
+        <div
+          className="flex flex-col gap-1 py-1 sm:col-start-3"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <ManualTargetPicker row={row} onSelect={onProspectChange} />
+        </div>
+      ) : row.status === "unmapped" ? (
         <div className="flex items-center gap-2 text-outline sm:col-start-3">
           <HelpIcon className="h-4 w-4" />
           <span className="font-mono text-xs font-medium italic leading-4">
@@ -174,38 +196,137 @@ function MappingTableRow({
       )}
 
       <div className="flex justify-end sm:col-start-4">
-        <button
-          type="button"
-          onClick={(event) => event.stopPropagation()}
-          className="text-[10px] text-primary hover:underline"
-        >
-          Select Target
-        </button>
+        {!row.requiresManualMapping ? (
+          <button
+            type="button"
+            onClick={(event) => event.stopPropagation()}
+            className="text-[10px] text-primary hover:underline"
+          >
+            Select Target
+          </button>
+        ) : null}
       </div>
 
       {selectedProspect ? (
         <p className="font-mono text-[10px] text-on-surface-variant sm:col-span-4 sm:hidden">
-          → {selectedProspect.targetField} ({selectedProspect.confidence}%)
+          → {selectedProspect.targetField}
+          {row.requiresManualMapping ? "" : ` (${selectedProspect.confidence}%)`}
         </p>
       ) : null}
     </div>
   );
 }
 
+function ManualTargetPicker({
+  row,
+  onSelect,
+}: {
+  row: FieldMappingRow;
+  onSelect: (prospectId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const selected = row.prospects.find(
+    (prospect) => prospect.id === row.selectedProspectId,
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return row.prospects;
+    return row.prospects.filter(
+      (prospect) =>
+        prospect.targetField.toLowerCase().includes(q) ||
+        (prospect.targetDescription ?? "").toLowerCase().includes(q),
+    );
+  }, [query, row.prospects]);
+
+  function handlePick(prospectId: string) {
+    onSelect(prospectId);
+    setOpen(false);
+    setQuery("");
+  }
+
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        {selected ? (
+          <span className="font-mono text-xs font-bold leading-4 text-on-surface">
+            {selected.targetField}
+          </span>
+        ) : (
+          <span className="text-xs italic leading-4 text-on-surface-variant">
+            Not selected
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="text-[10px] text-primary hover:underline"
+        >
+          {selected ? "Change" : "Select Target Field"}
+        </button>
+      </div>
+
+      <Dialog
+        open={open}
+        title={`Select target field for ${row.sourceField}`}
+        onClose={() => setOpen(false)}
+      >
+        <div className="flex flex-col gap-3">
+          <input
+            type="text"
+            autoFocus
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Filter by SAP field or description..."
+            className="w-full rounded border border-outline-variant bg-surface-bright px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant focus:border-primary focus:outline-none"
+          />
+          <ul className="max-h-96 divide-y divide-outline-variant overflow-auto rounded border border-outline-variant">
+            {filtered.length === 0 ? (
+              <li className="px-3 py-3 text-sm text-on-surface-variant">
+                No matching target fields
+              </li>
+            ) : (
+              filtered.map((prospect) => (
+                <li key={prospect.id}>
+                  <button
+                    type="button"
+                    onClick={() => handlePick(prospect.id)}
+                    className={`w-full px-3 py-2 text-left transition-colors hover:bg-surface-container-high ${
+                      prospect.id === row.selectedProspectId
+                        ? "bg-primary-container/10"
+                        : ""
+                    }`}
+                  >
+                    <div className="font-mono text-xs font-semibold text-on-surface">
+                      {prospect.targetField}
+                    </div>
+                    {prospect.targetDescription ? (
+                      <div className="text-[12px] leading-4 text-on-surface-variant">
+                        {prospect.targetDescription}
+                      </div>
+                    ) : null}
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      </Dialog>
+    </>
+  );
+}
+
 function AiMappingReviewPanel({
   row,
-  onApprove,
-  onReject,
 }: {
   row: FieldMappingRow | null;
-  onApprove: () => void;
-  onReject: () => void;
 }) {
   const selectedProspect = row?.prospects.find(
     (prospect) => prospect.id === row.selectedProspectId,
   );
 
-  if (!row || row.status === "unmapped" || !selectedProspect || !row.aiReview) {
+  if (!row || !selectedProspect) {
     return (
       <aside className="flex w-full flex-col overflow-hidden rounded-[20px] border border-outline-variant bg-surface shadow-ambient lg:w-[400px] lg:shrink-0">
         <div className="border-b border-outline-variant bg-secondary-container/10 p-6">
@@ -222,6 +343,34 @@ function AiMappingReviewPanel({
         </div>
         <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-on-surface-variant">
           No mapping selected for review.
+        </div>
+      </aside>
+    );
+  }
+
+  if (row.requiresManualMapping) {
+    return (
+      <aside className="flex w-full flex-col overflow-hidden rounded-[20px] border border-outline-variant bg-surface shadow-ambient lg:w-[400px] lg:shrink-0">
+        <div className="border-b border-outline-variant bg-secondary-container/10 p-6">
+          <div className="mb-2 flex items-center gap-2 text-outline">
+            <AutoAwesomeIcon className="h-4 w-4" />
+            <span className="text-xs font-semibold uppercase tracking-[0.05em] leading-4">
+              AI Mapping Review
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="rounded border border-outline-variant bg-surface px-2 py-1 font-mono text-xs font-medium leading-4">
+              {row.sourceField}
+            </span>
+            <ArrowForwardIcon className="h-4 w-4 text-outline" />
+            <span className="rounded border border-outline-variant bg-surface px-2 py-1 font-mono text-xs font-medium leading-4">
+              {selectedProspect.targetField}
+            </span>
+          </div>
+        </div>
+        <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-on-surface-variant">
+          Manually selected target field — no AI confidence data is available
+          for key fields under an internal number range.
         </div>
       </aside>
     );
@@ -254,7 +403,7 @@ function AiMappingReviewPanel({
               Confidence Breakdown
             </h3>
             <div className="text-2xl font-bold leading-8 text-secondary">
-              {row.aiReview.confidence}%
+              {selectedProspect.confidence}%
             </div>
           </div>
           <div className="flex flex-col gap-3">
@@ -264,11 +413,11 @@ function AiMappingReviewPanel({
                   Semantic Similarity
                 </span>
                 <span className="text-[13px] font-medium leading-[18px]">
-                  {row.aiReview.semanticSimilarity}%
+                  {selectedProspect.semanticSimilarity ?? 0}%
                 </span>
               </div>
               <ProgressBar
-                value={row.aiReview.semanticSimilarity}
+                value={selectedProspect.semanticSimilarity ?? 0}
                 barClassName="bg-secondary"
               />
             </div>
@@ -278,11 +427,11 @@ function AiMappingReviewPanel({
                   Datatype Match
                 </span>
                 <span className="text-[13px] font-medium leading-[18px] text-success">
-                  {row.aiReview.datatypeMatch}%
+                  {selectedProspect.datatypeMatch ?? 0}%
                 </span>
               </div>
               <ProgressBar
-                value={row.aiReview.datatypeMatch}
+                value={selectedProspect.datatypeMatch ?? 0}
                 barClassName="bg-success"
               />
             </div>
@@ -294,40 +443,8 @@ function AiMappingReviewPanel({
             AI Reasoning
           </h3>
           <div className="rounded border border-outline-variant bg-surface-bright p-4 text-[13px] leading-relaxed text-on-surface-variant">
-            &ldquo;{row.aiReview.reasoning}&rdquo;
+            &ldquo;{selectedProspect.reasoning ?? "No reasoning available."}&rdquo;
           </div>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-2 border-t border-outline-variant bg-surface p-6">
-        <Button
-          type="button"
-          size="md"
-          fullWidth
-          onClick={onApprove}
-          className="h-auto gap-2 bg-secondary py-2 text-xs font-semibold uppercase tracking-[0.02em] shadow-none hover:bg-secondary-container"
-        >
-          <CheckIcon className="h-4 w-4" />
-          Approve Mapping
-        </Button>
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="md"
-            className="h-auto py-2 text-xs font-semibold uppercase tracking-[0.02em]"
-          >
-            Edit Target
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="md"
-            onClick={onReject}
-            className="h-auto border-error-container py-2 text-xs font-semibold uppercase tracking-[0.02em] text-error hover:bg-error-container/20"
-          >
-            Reject
-          </Button>
         </div>
       </div>
     </aside>
@@ -337,9 +454,12 @@ function AiMappingReviewPanel({
 export function FieldMappingWorkspaceView({
   workspace,
 }: FieldMappingWorkspaceViewProps) {
+  const router = useRouter();
   const [rows, setRows] = useState(workspace.rows);
   const [activeRowId, setActiveRowId] = useState(workspace.defaultActiveRowId);
   const [search, setSearch] = useState("");
+  const [approving, setApproving] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
 
   const filteredRows = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -356,6 +476,17 @@ export function FieldMappingWorkspaceView({
 
   const activeRow = rows.find((row) => row.id === activeRowId) ?? null;
 
+  const hasUnmappedFields = rows.some((row) => !row.selectedProspectId);
+
+  const fieldsReadyToConfirm: ConfirmMappingField[] = rows.flatMap((row) => {
+    const selectedProspect = row.prospects.find(
+      (prospect) => prospect.id === row.selectedProspectId,
+    );
+    return selectedProspect
+      ? [{ sourceField: row.sourceField, targetField: selectedProspect.targetField }]
+      : [];
+  });
+
   function handleProspectChange(rowId: string, prospectId: string) {
     setRows((current) =>
       current.map((row) =>
@@ -365,12 +496,21 @@ export function FieldMappingWorkspaceView({
     setActiveRowId(rowId);
   }
 
-  function handleApprove() {
-    console.info("Approve mapping clicked (mock)");
-  }
+  async function handleApprove() {
+    if (rows.length === 0 || hasUnmappedFields) {
+      setApproveError("All fields must be mapped before approving.");
+      return;
+    }
 
-  function handleReject() {
-    console.info("Reject mapping clicked (mock)");
+    setApproveError(null);
+    setApproving(true);
+    try {
+      await confirmMapping(workspace.id, fieldsReadyToConfirm);
+      router.push("/field-mapping");
+    } catch (err) {
+      setApproveError(getApiErrorMessage(err, "Failed to confirm mappings"));
+      setApproving(false);
+    }
   }
 
   return (
@@ -398,8 +538,23 @@ export function FieldMappingWorkspaceView({
               <FilterListIcon className="h-4 w-4" />
               Filter
             </button>
+            <Button
+              type="button"
+              size="md"
+              onClick={handleApprove}
+              disabled={approving || hasUnmappedFields || rows.length === 0}
+              className="h-auto gap-2 bg-secondary px-3 py-1.5 text-[13px] font-semibold uppercase tracking-[0.02em] shadow-none hover:bg-secondary-container"
+            >
+              <CheckIcon className="h-4 w-4" />
+              {approving ? "Approving..." : "Approve Mapping"}
+            </Button>
           </div>
         </div>
+        {approveError ? (
+          <p className="border-b border-outline-variant bg-error-container/10 px-4 py-2 text-xs text-error" role="alert">
+            {approveError}
+          </p>
+        ) : null}
 
         <div className="min-h-0 flex-1 overflow-auto p-4">
           <div className="sticky top-0 z-10 mb-2 hidden border-b border-outline-variant bg-surface px-4 py-2 sm:grid sm:grid-cols-[1fr_40px_1fr_auto] sm:gap-4">
@@ -431,11 +586,7 @@ export function FieldMappingWorkspaceView({
         </div>
       </section>
 
-      <AiMappingReviewPanel
-        row={activeRow}
-        onApprove={handleApprove}
-        onReject={handleReject}
-      />
+      <AiMappingReviewPanel row={activeRow} />
     </div>
   );
 }

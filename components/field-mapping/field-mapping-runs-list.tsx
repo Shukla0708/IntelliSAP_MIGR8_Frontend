@@ -1,16 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SectionCard } from "@/components/dashboard/kpi-card";
 import { ProjectPickerDialog } from "@/components/projects/project-picker-dialog";
 import { AddIcon, HubIcon } from "@/components/ui/icons";
-import { useProject } from "@/contexts/project-context";
-import type {
-  FieldMappingRun,
-  FieldMappingRunStatus,
-} from "@/data/field-mapping";
-import { PREVIOUS_FIELD_MAPPING_RUNS } from "@/data/field-mapping";
+import apiClient from "@/lib/axios";
+import { useDefaultProject } from "@/lib/use-default-project";
+import type { FieldMappingRunStatus } from "@/data/field-mapping";
 
 const statusStyles: Record<
   FieldMappingRunStatus,
@@ -30,15 +27,81 @@ const statusStyles: Record<
   },
 };
 
-type FieldMappingRunsListProps = {
-  runs?: FieldMappingRun[];
+type MappingRunApiItem = {
+  mappingRunId: string;
+  mappingName: string | null;
+  status: string;
+  sourceFilename: string | null;
+  targetFilename: string | null;
+  totalSourceFields: number;
+  mappedFields: number;
+  createdAt: string | null;
 };
 
-export function FieldMappingRunsList({
-  runs = PREVIOUS_FIELD_MAPPING_RUNS,
-}: FieldMappingRunsListProps) {
-  const { selectedProject } = useProject();
+type RunListItem = {
+  id: string;
+  name: string;
+  status: FieldMappingRunStatus;
+  fields: string;
+  unmapped: number;
+  ranAt: string;
+};
+
+function toRunStatus(status: string): FieldMappingRunStatus {
+  if (status === "completed" || status === "failed") return status;
+  return "running";
+}
+
+function mapRun(run: MappingRunApiItem): RunListItem {
+  const created = run.createdAt ? new Date(run.createdAt) : null;
+
+  return {
+    id: run.mappingRunId,
+    name: run.mappingName || "New field mapping run",
+    status: toRunStatus(run.status),
+    fields: `${run.totalSourceFields} fields`,
+    unmapped: Math.max(run.totalSourceFields - run.mappedFields, 0),
+    ranAt:
+      created && !Number.isNaN(created.getTime())
+        ? created.toLocaleString()
+        : "Not run yet",
+  };
+}
+
+export function FieldMappingRunsList() {
+  const { project, loading: projectLoading } = useDefaultProject();
+  const [runs, setRuns] = useState<RunListItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  const projectId = project?.id ?? null;
+
+  useEffect(() => {
+    if (!projectId) {
+      setRuns([]);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+
+    apiClient
+      .get<MappingRunApiItem[]>(`/api/mappings/?project_id=${projectId}`)
+      .then((res) => {
+        if (!cancelled) setRuns(res.data.map(mapRun));
+      })
+      .catch(() => {
+        if (!cancelled) setRuns([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   return (
     <div className="mx-auto w-full max-w-[1200px]">
@@ -48,9 +111,9 @@ export function FieldMappingRunsList({
             Field Mapping
           </h2>
           <p className="max-w-2xl text-base leading-6 text-on-surface-variant">
-            Review previous field mapping runs
-            {selectedProject ? ` for "${selectedProject.name}"` : " for this migration project"}
-            , or start a new mapping.
+            {project
+              ? `Review previous field mapping runs for "${project.name}", or start a new mapping.`
+              : "Select a project to review its field mapping runs, or browse all mappings."}
           </p>
           <p className="mt-2 text-sm">
             <Link
@@ -79,6 +142,39 @@ export function FieldMappingRunsList({
         </div>
 
         <div className="divide-y divide-outline-variant">
+          {!project && !projectLoading && (
+            <p className="p-4 text-sm text-on-surface-variant">
+              No project selected.{" "}
+              <Link
+                href="/projects"
+                className="font-semibold text-primary hover:underline"
+              >
+                Choose a project
+              </Link>{" "}
+              or{" "}
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className="font-semibold text-primary hover:underline"
+              >
+                start a new mapping
+              </button>
+              .
+            </p>
+          )}
+
+          {(projectLoading || (project && loading)) && (
+            <p className="p-4 text-sm text-on-surface-variant">
+              Loading mapping runs...
+            </p>
+          )}
+
+          {project && !projectLoading && !loading && runs.length === 0 && (
+            <p className="p-4 text-sm text-on-surface-variant">
+              No field mappings in {project.name}.
+            </p>
+          )}
+
           {runs.map((run) => {
             const status = statusStyles[run.status];
 

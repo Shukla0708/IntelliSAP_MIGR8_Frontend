@@ -90,7 +90,8 @@ Public (no JWT): `/sign-in`, `/register`. All other product routes live under `a
    - `/validation/new` stages name, file, and rules locally; **no DB row until Save Draft or Run Validation**
    - `/validation/[id]` loads saved draft via `GET /api/runs/{id}`; can replace file or run without re-selecting from disk
 8. **Field Mapping flow:**
-   - `/field-mapping` or `/activity/mappings` → detail `/field-mapping/{id}`; create gated by project picker → `/field-mapping/new` → `/field-mapping/map-new`
+   - `/field-mapping` (project-scoped, **live** via `GET /api/mappings/?project_id=`) → detail `/field-mapping/{id}` (real `mappingRunId`, live); create gated by project picker → `/field-mapping/new` → number-range dialog → `/field-mapping/{mappingRunId}`
+   - `/activity/mappings` (cross-project) is still mock (`PREVIOUS_FIELD_MAPPING_RUNS`) — no cross-project mapping-runs API yet
 9. **Comparison flow:**
    - `/compare` or `/activity/comparisons` → detail `/compare/{id}`; create gated by project picker → `/compare/new` → `/compare/cmp-new`
 10. Validation sidebar (project) stays active on `/validation*` and `/validation_result*`.
@@ -128,12 +129,14 @@ Defined in `data/dashboard.ts` (`SIDEBAR_OVERVIEW`, `SIDEBAR_ACTIVITY`, `SIDEBAR
 
 ### Mock field mapping run IDs
 
+**Legacy fixtures** — `data/field-mapping-workspace.ts`'s `FIELD_MAPPING_WORKSPACES`/`PREVIOUS_FIELD_MAPPING_RUNS` are no longer used by the live `/field-mapping` flow (it fetches real `mappingRunId`s from the API); they're still referenced by `/activity/mappings` (mock) and `data/project-report.ts`'s mapping-preview aggregation.
+
 | ID | Source | Notes |
 | --- | --- | --- |
 | `map-001` | `PREVIOUS_FIELD_MAPPING_RUNS` | Customer Master — full schema map |
 | `map-002` | `PREVIOUS_FIELD_MAPPING_RUNS` | Address & contact fields |
 | `map-003` | `PREVIOUS_FIELD_MAPPING_RUNS` | Payment terms mapping |
-| `map-new` | `LATEST_FIELD_MAPPING_RUN_ID` | Target after **Start Mapping** |
+| `map-new` | `LATEST_FIELD_MAPPING_RUN_ID` | Unused by the live flow now — kept for the mock fixtures above |
 
 ### Mock comparison run IDs
 
@@ -154,6 +157,17 @@ Defined in `data/dashboard.ts` (`SIDEBAR_OVERVIEW`, `SIDEBAR_ACTIVITY`, `SIDEBAR
 | Target Field List | File upload — **Select Target File**; **OR** divider + **Fetch from SAP** (table name input + **Fetch** button, mock) |
 
 Topbar: `AI Mapping: Upload Source & Target Schemas` (`FIELD_MAPPING_TOPBAR_TITLE`).
+
+Submitting opens `NumberRangeDialog` (`components/field-mapping/number-range-dialog.tsx`) first — user picks `"internal"` or `"external"` number range (required by the backend's `number_range_type` form field). On confirm, `field-mapping-setup-view.tsx` calls `createMappingRun(projectId, sourceFile, targetFile, numberRangeType)` (`lib/mapping-api.ts`) and `router.push` to the real `/field-mapping/{mappingRunId}` returned by the API — not a mock id.
+
+### Field Mapping workspace (`/field-mapping/[id]`)
+
+`FieldMappingWorkspaceView` (`components/field-mapping/field-mapping-workspace-view.tsx`) is fully API-driven: the page fetches `fetchMappingRunResult(id)` then `toFieldMappingWorkspace(result, projectName)` (both in `lib/mapping-api.ts`).
+
+- **Per-row selection** — each AI-suggested row is a native radio group (one prospect selected at a time); picking a radio updates that row's Confidence Breakdown / Semantic Similarity / Datatype Match / AI Reasoning in the side panel live, since those now read from the *selected* prospect's own data rather than a fixed "top candidate" snapshot.
+- **Key fields under an internal number range** (`row.requiresManualMapping`) skip the radio list entirely — `ManualTargetPicker` shows the current pick (or "Not selected") plus a button that opens a `Dialog` (`components/ui/dialog.tsx`) listing **every** target field with its description (filterable by a search box inside the dialog, not required before anything shows).
+- **Badges** — rows show a "Key Field" badge when `row.keyField` is true, and an "Approved" badge when `row.confirmed` is true (derived from the API's `confirmedTargetField`, i.e. already present in `final_mapping`).
+- **Single approve action** — one "Approve Mapping" button in the header confirms every row's current selection in one `confirmMapping()` call. It's disabled (and shows "All fields must be mapped before approving." if forced) whenever any row has no `selectedProspectId`. On success it navigates back to `/field-mapping` (the runs list). There is no per-row approve/reject button anymore.
 
 ### Comparison setup (`/compare/new`)
 
@@ -351,9 +365,10 @@ await apiClient.post("/api/auth/login", { email, password });
 | Projects (`/projects` list + create + sidebar switcher) | Live via `ProjectProvider` |
 | Validation list / upload / rules / execute / results / download | Live |
 | Activity validations (`GET /api/runs/`) | Live cross-project for current user |
-| Dashboard KPIs / recent activity | Live for projects + validations; compare/mapping still mock-augmented |
-| Project report (`GET /api/projects/{id}/report` + mock merge) | Live validation KPIs; compare/mapping preview from fixtures |
-| Field mapping / comparison (project + activity lists) | UI mock (friend's screens) until APIs exist |
+| Dashboard KPIs / recent activity | Live for projects + validations; compare still mock-augmented |
+| Project report (`GET /api/projects/{id}/report` + mock merge) | Live validation KPIs; compare preview from fixtures (mapping preview also still reads mock `FIELD_MAPPING_WORKSPACES`, not the live API — see Open Questions) |
+| Field mapping (`/field-mapping` list, `/field-mapping/new` create, `/field-mapping/[id]` workspace, confirm) | **Live** — `lib/mapping-api.ts` end to end; `/activity/mappings` (cross-project) still mock |
+| Comparison (project + activity lists) | UI mock (friend's screens) until APIs exist |
 
 `AppProviders` wraps `AuthProvider` → `ProjectProvider`. Validation uses `useDefaultProject()` which reads the selected project from context. **Browse** can be global; **create** always confirms a project via `ProjectPickerDialog`.
 
@@ -463,6 +478,14 @@ npm run lint     # ESLint
 ---
 
 ## Session Log
+
+### 2026-08-13 — Field mapping workspace: single approve action, key-field/approved badges, live AI review, manual-picker popup
+
+- `FieldMappingWorkspaceView`: removed the old per-row "Approve Mapping" / "Edit Target" / "Reject" footer entirely. One header-level **Approve Mapping** button now confirms every row's current selection in a single `confirmMapping()` call; it's blocked (button disabled + inline error) if any row has no `selectedProspectId`. On success it `router.push`es back to `/field-mapping`.
+- Fixed a real bug: the AI Mapping Review side panel's Confidence Breakdown / Semantic Similarity / Datatype Match / Reasoning were frozen to the *first* (top) candidate's data regardless of which radio button was selected, because they read a static `row.aiReview` computed once from `prospects[0]`. `MappingProspect` (`data/field-mapping-workspace.ts`) now carries `semanticSimilarity`, `datatypeMatch`, `reasoning`, `targetDescription` per prospect (populated in `toFieldMappingWorkspace`, `lib/mapping-api.ts`), and the panel reads from the currently `selectedProspect` instead — so changing the radio now live-updates the whole panel. `row.aiReview` is still computed for backward compat with `data/project-report.ts`'s mock aggregation, but the workspace view no longer reads it.
+- Added a "Key Field" badge (from `row.keyField`) and an "Approved" badge (from `row.confirmed`, derived from the API's `confirmedTargetField`) next to each source field name in the mapping table.
+- Replaced `ManualTargetPicker`'s type-to-filter box (which showed nothing until you typed) with a button that opens a `Dialog` (`components/ui/dialog.tsx`) listing **every** target field with its description; an optional search box inside the dialog narrows the list, but browsing without typing now works.
+- Backend contract addition consumed here: `GET /{run_id}/result` rows now include `confirmedTargetField` (see backend `Project.md`).
 
 ### 2026-08-13 — Project report screen (`/report`)
 
@@ -658,7 +681,9 @@ npm run lint     # ESLint
 ## Open Questions / TBD
 
 - Wire remaining sidebar routes: Settings
-- Wire compare/mapping APIs; replace activity mock lists
+- Wire compare API; replace `/activity/comparisons` and `/activity/mappings` mock lists (project-scoped field mapping is already wired)
+- `data/project-report.ts`'s mapping-preview aggregation still reads mock `FIELD_MAPPING_WORKSPACES`/`aiReview`, not the live `/api/mappings` data — reconcile once the report screen needs real mapping KPIs
+- No per-run "list/edit confirmed fields" UI beyond reopening the workspace (matches backend: no un-confirm endpoint yet either)
 - httpOnly cookie / refresh tokens (currently Bearer + readable cookie for middleware)
 - Remove dead validation mock fixtures after cutover
 - Optional nested URLs `/projects/[id]/validation` later (flat routes + context for now)
