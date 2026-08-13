@@ -1,13 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SectionCard } from "@/components/dashboard/kpi-card";
 import { ProjectPickerDialog } from "@/components/projects/project-picker-dialog";
 import { AddIcon, CompareIcon } from "@/components/ui/icons";
 import { useProject } from "@/contexts/project-context";
-import type { ComparisonRun, ComparisonRunStatus } from "@/data/comparison";
-import { PREVIOUS_COMPARISON_RUNS } from "@/data/comparison";
+import { getApiErrorMessage } from "@/lib/axios";
+import {
+  listComparisons,
+  type ComparisonListItem,
+} from "@/lib/comparison-api";
+import type { ComparisonRunStatus } from "@/data/comparison";
 
 const statusStyles: Record<
   ComparisonRunStatus,
@@ -27,15 +31,25 @@ const statusStyles: Record<
   },
 };
 
-type ComparisonRunsListProps = {
-  runs?: ComparisonRun[];
-};
+function toStatus(status: string): ComparisonRunStatus {
+  if (status === "failed" || status === "running" || status === "completed") {
+    return status;
+  }
+  return "running";
+}
 
-export function ComparisonRunsList({
-  runs = PREVIOUS_COMPARISON_RUNS,
-}: ComparisonRunsListProps) {
+export function ComparisonRunsList() {
   const { selectedProject } = useProject();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [runs, setRuns] = useState<ComparisonListItem[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedProject?.id) return;
+    listComparisons(selectedProject.id)
+      .then(setRuns)
+      .catch((err) => setError(getApiErrorMessage(err, "Could not load comparisons")));
+  }, [selectedProject?.id]);
 
   return (
     <div className="mx-auto w-full max-w-[1200px]">
@@ -68,6 +82,8 @@ export function ComparisonRunsList({
         </button>
       </div>
 
+      {error ? <p className="mb-4 text-sm text-error">{error}</p> : null}
+
       <SectionCard className="overflow-hidden">
         <div className="border-b border-outline-variant bg-surface-container-lowest p-4">
           <h3 className="text-xl font-semibold leading-7 text-on-surface">
@@ -76,9 +92,13 @@ export function ComparisonRunsList({
         </div>
 
         <div className="divide-y divide-outline-variant">
+          {runs.length === 0 ? (
+            <p className="p-4 text-sm text-on-surface-variant">
+              No comparisons yet for this project.
+            </p>
+          ) : null}
           {runs.map((run) => {
-            const status = statusStyles[run.status];
-
+            const status = statusStyles[toStatus(run.status)];
             return (
               <Link
                 key={run.id}
@@ -99,7 +119,7 @@ export function ComparisonRunsList({
                       </span>
                       <span className="text-xs text-outline">•</span>
                       <span className="font-mono text-xs font-medium leading-4 text-on-surface-variant">
-                        {run.ranAt}
+                        {run.ranAt ? new Date(run.ranAt).toLocaleString() : "Not run yet"}
                       </span>
                     </div>
                   </div>

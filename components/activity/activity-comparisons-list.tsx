@@ -1,16 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SectionCard } from "@/components/dashboard/kpi-card";
 import { ProjectPickerDialog } from "@/components/projects/project-picker-dialog";
 import { AddIcon, CompareIcon, SearchIcon } from "@/components/ui/icons";
 import { useProject } from "@/contexts/project-context";
+import { getApiErrorMessage } from "@/lib/axios";
 import {
-  PREVIOUS_COMPARISON_RUNS,
-  type ComparisonRun,
-  type ComparisonRunStatus,
-} from "@/data/comparison";
+  listComparisons,
+  type ComparisonListItem,
+} from "@/lib/comparison-api";
+import type { ComparisonRunStatus } from "@/data/comparison";
 
 const statusStyles: Record<
   ComparisonRunStatus,
@@ -21,40 +22,31 @@ const statusStyles: Record<
   running: { label: "Running", className: "bg-primary-container/10 text-primary" },
 };
 
-export type ActivityComparisonRun = ComparisonRun & {
-  projectId: string;
-  projectName: string;
-};
-
-/** Mock cross-project comparisons until compare API exists */
-export const ACTIVITY_COMPARISON_RUNS: ActivityComparisonRun[] = [
-  {
-    ...PREVIOUS_COMPARISON_RUNS[0],
-    projectId: "mock-customer",
-    projectName: "Customer Master — Oracle → SAP",
-  },
-  {
-    ...PREVIOUS_COMPARISON_RUNS[1],
-    projectId: "mock-material",
-    projectName: "Material Master",
-  },
-  {
-    ...PREVIOUS_COMPARISON_RUNS[2],
-    projectId: "mock-vendor",
-    projectName: "Vendor Master",
-  },
-];
+function toStatus(status: string): ComparisonRunStatus {
+  if (status === "failed" || status === "running" || status === "completed") {
+    return status;
+  }
+  return "running";
+}
 
 export function ActivityComparisonsList() {
   const { projects } = useProject();
   const [projectFilter, setProjectFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [runs, setRuns] = useState<ComparisonListItem[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    listComparisons()
+      .then(setRuns)
+      .catch((err) => setError(getApiErrorMessage(err, "Could not load comparisons")));
+  }, []);
 
   const projectNames = useMemo(() => {
-    const fromRuns = ACTIVITY_COMPARISON_RUNS.map((run) => ({
-      id: run.projectId,
-      name: run.projectName,
+    const fromRuns = runs.map((run) => ({
+      id: run.project_id,
+      name: run.project_name,
     }));
     const seen = new Set<string>();
     return [...fromRuns, ...projects.map((p) => ({ id: p.id, name: p.name }))].filter(
@@ -64,19 +56,19 @@ export function ActivityComparisonsList() {
         return true;
       },
     );
-  }, [projects]);
+  }, [projects, runs]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return ACTIVITY_COMPARISON_RUNS.filter((run) => {
-      if (projectFilter !== "all" && run.projectId !== projectFilter) return false;
+    return runs.filter((run) => {
+      if (projectFilter !== "all" && run.project_id !== projectFilter) return false;
       if (!q) return true;
       return (
         run.name.toLowerCase().includes(q) ||
-        run.projectName.toLowerCase().includes(q)
+        run.project_name.toLowerCase().includes(q)
       );
     });
-  }, [projectFilter, search]);
+  }, [projectFilter, runs, search]);
 
   return (
     <div className="mx-auto w-full max-w-[1200px]">
@@ -128,6 +120,8 @@ export function ActivityComparisonsList() {
         </label>
       </div>
 
+      {error ? <p className="mb-4 text-sm text-error">{error}</p> : null}
+
       <SectionCard className="overflow-hidden">
         <div className="border-b border-outline-variant bg-surface-container-lowest p-4">
           <h3 className="text-xl font-semibold leading-7 text-on-surface">
@@ -141,7 +135,7 @@ export function ActivityComparisonsList() {
             </p>
           )}
           {filtered.map((run) => {
-            const status = statusStyles[run.status];
+            const status = statusStyles[toStatus(run.status)];
             return (
               <Link
                 key={run.id}
@@ -158,14 +152,14 @@ export function ActivityComparisonsList() {
                     </p>
                     <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
                       <span className="rounded bg-surface-container-high px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">
-                        {run.projectName}
+                        {run.project_name}
                       </span>
                       <span className="font-mono text-xs font-medium leading-4 text-on-surface-variant">
                         {run.records}
                       </span>
                       <span className="text-xs text-outline">•</span>
                       <span className="font-mono text-xs font-medium leading-4 text-on-surface-variant">
-                        {run.ranAt}
+                        {run.ranAt ? new Date(run.ranAt).toLocaleString() : "Not run yet"}
                       </span>
                     </div>
                   </div>

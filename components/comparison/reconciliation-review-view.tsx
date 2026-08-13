@@ -19,6 +19,7 @@ import type {
 
 type ReconciliationReviewViewProps = {
   review: ReconciliationReviewSummary;
+  onDownload?: () => void;
 };
 
 function StatusIcon({ status }: { status: DiscrepancyStatus }) {
@@ -135,11 +136,12 @@ function DiscrepancyRow({ row }: { row: ReconciliationDiscrepancy }) {
 
 export function ReconciliationReviewView({
   review,
+  onDownload,
 }: ReconciliationReviewViewProps) {
   const tableRef = useRef<HTMLDivElement>(null);
 
   function handleDownload() {
-    console.info("Download comparison report clicked (mock)", { id: review.id });
+    onDownload?.();
   }
 
   function handleViewExceptions() {

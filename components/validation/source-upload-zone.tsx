@@ -88,6 +88,10 @@ export function SourceUploadZone({
             : "Drag and drop your source Excel/CSV file here, or"
           : "Enter a unique validation run name above, then select your source file."}
       </p>
+      <p className="max-w-md text-xs text-on-surface-variant">
+        CSV and .xlsx are supported. Files with 5 lakh+ rows may take several
+        minutes.
+      </p>
       <label
         className={`rounded bg-primary-container px-4 py-2 text-sm font-semibold text-on-primary ${
           nameReady && !parsing

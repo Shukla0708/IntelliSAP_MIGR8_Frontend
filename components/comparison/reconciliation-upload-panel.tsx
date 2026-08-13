@@ -1,13 +1,15 @@
 "use client";
 
 import type { ChangeEvent } from "react";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { DescriptionIcon, UploadFileIcon } from "@/components/ui/icons";
 import type { ReconciliationUploadCard } from "@/data/comparison";
 
 type ReconciliationUploadPanelProps = {
   card: ReconciliationUploadCard;
   showMetadata: boolean;
+  fileName?: string | null;
+  onFileSelected?: (file: File) => void;
 };
 
 const accentStyles = {
@@ -15,8 +17,7 @@ const accentStyles = {
     borderHover: "hover:border-primary",
     iconBg: "bg-primary-container/10 group-hover:bg-primary-container/20",
     iconText: "text-primary",
-    button:
-      "border-primary text-primary hover:bg-primary-container/10",
+    button: "border-primary text-primary hover:bg-primary-container/10",
     metadataBorderHover: "hover:border-primary",
     metadataIcon: "text-primary",
   },
@@ -33,11 +34,11 @@ const accentStyles = {
 export function ReconciliationUploadPanel({
   card,
   showMetadata,
+  fileName,
+  onFileSelected,
 }: ReconciliationUploadPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const metadataInputRef = useRef<HTMLInputElement>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [metadataFileName, setMetadataFileName] = useState<string | null>(null);
   const styles = accentStyles[card.accent];
 
   function handleFileSelect() {
@@ -51,15 +52,7 @@ export function ReconciliationUploadPanel({
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    setFileName(file.name);
-    console.info(`${card.id} file selected`, { name: file.name });
-  }
-
-  function handleMetadataChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setMetadataFileName(file.name);
-    console.info(`${card.id} metadata selected`, { name: file.name });
+    onFileSelected?.(file);
   }
 
   return (
@@ -87,11 +80,14 @@ export function ReconciliationUploadPanel({
       <p className="mb-4 text-[13px] leading-[18px] text-on-surface-variant">
         {card.description}
       </p>
+      <p className="mb-3 text-xs text-on-surface-variant">
+        CSV and .xlsx. Files with 5 lakh+ rows may take several minutes.
+      </p>
 
       <input
         ref={fileInputRef}
         type="file"
-        accept=".csv,.xlsx,.json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/json"
+        accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
         className="hidden"
         onChange={handleFileChange}
         onClick={(event) => event.stopPropagation()}
@@ -122,15 +118,17 @@ export function ReconciliationUploadPanel({
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.02em] text-on-surface-variant">
             {card.metadataLabel}
           </p>
-
+          <p className="mb-2 text-[11px] text-on-surface-variant">
+            Optional in this version — join keys come from confirmed mapping or
+            the picker below.
+          </p>
           <input
             ref={metadataInputRef}
             type="file"
             accept=".csv,.json,text/csv,application/json"
             className="hidden"
-            onChange={handleMetadataChange}
+            onChange={handleMetadataSelect}
           />
-
           <button
             type="button"
             onClick={handleMetadataSelect}
@@ -138,7 +136,7 @@ export function ReconciliationUploadPanel({
           >
             <DescriptionIcon className={`h-4 w-4 ${styles.metadataIcon}`} />
             <span className="text-[13px] leading-[18px] text-on-surface-variant">
-              {metadataFileName ?? card.metadataPlaceholder}
+              {card.metadataPlaceholder}
             </span>
           </button>
         </div>

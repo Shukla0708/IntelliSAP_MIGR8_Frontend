@@ -391,7 +391,7 @@ await apiClient.post("/api/auth/login", { email, password });
 | Detail | `GET /api/runs/{run_id}` — name, status, `source_filename`, `has_source_file`, `fields[]` with rules |
 | Upload | `POST /api/runs/{run_id}/upload` — multipart `file` |
 | Rules | `PUT /api/runs/{run_id}/rules` — array of `FieldRuleIn` |
-| Execute | `POST /api/runs/{run_id}/execute` |
+| Execute | `POST /api/runs/{run_id}/execute` → **202** `{ status: "running" }`; poll `GET /api/runs/{id}/result` |
 | Uniqueness | Name must be unique **per project**; backend returns `409` with a clear `detail` if duplicate |
 | List | `GET /api/projects/{id}/runs` and `GET /api/runs/` return real statuses (`draft`, `rules_configured`, etc.) |
 | UI staging | `/validation/new` requires name before file select; file + rules stay local until **Save Draft** or **Run Validation** |
@@ -481,6 +481,12 @@ npm run lint     # ESLint
 ---
 
 ## Session Log
+
+### 2026-08-14 — Large-file validation + live comparison
+
+- Validation execute is async: after **Run Validation** the results page polls until `completed`/`failed`. Leaving the app shell still shows an in-app **Results ready — View** banner (`lib/job-tracker.ts`).
+- Comparison is live: `/compare`, `/compare/new`, `/compare/[id]`, and `/activity/comparisons` call `/api/comparisons`. Join keys come from confirmed mapping or same-named columns.
+- Upload timeout is disabled for large files; 5 lakh+ warning copy is on the upload cards.
 
 ### 2026-08-13 — Results chatbot drawer
 
@@ -689,7 +695,7 @@ npm run lint     # ESLint
 ## Open Questions / TBD
 
 - Wire remaining sidebar routes: Settings
-- Wire compare API; replace `/activity/comparisons` and `/activity/mappings` mock lists (project-scoped field mapping is already wired)
+- Wire remaining sidebar routes: Settings
 - `data/project-report.ts`'s mapping-preview aggregation still reads mock `FIELD_MAPPING_WORKSPACES`/`aiReview`, not the live `/api/mappings` data — reconcile once the report screen needs real mapping KPIs
 - No per-run "list/edit confirmed fields" UI beyond reopening the workspace (matches backend: no un-confirm endpoint yet either)
 - httpOnly cookie / refresh tokens (currently Bearer + readable cookie for middleware)

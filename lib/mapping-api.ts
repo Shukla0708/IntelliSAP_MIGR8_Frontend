@@ -54,6 +54,19 @@ export async function createMappingRun(
   return data;
 }
 
+export async function listMappingRuns(projectId: string) {
+  const { data } = await apiClient.get<
+    Array<{
+      mappingRunId: string;
+      mappingName: string | null;
+      status: string;
+      sourceFilename: string | null;
+      targetFilename: string | null;
+    }>
+  >(`/api/mappings/?project_id=${projectId}`);
+  return data;
+}
+
 export async function fetchMappingRunResult(
   runId: string,
 ): Promise<MappingRunResult> {
