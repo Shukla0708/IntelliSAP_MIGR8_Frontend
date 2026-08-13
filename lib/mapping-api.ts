@@ -63,17 +63,36 @@ export async function createMappingRun(
   return data;
 }
 
-export async function listMappingRuns(projectId: string) {
-  const { data } = await apiClient.get<
-    Array<{
-      mappingRunId: string;
-      mappingName: string | null;
-      status: string;
-      sourceFilename: string | null;
-      targetFilename: string | null;
-    }>
-  >(`/api/mappings/?project_id=${projectId}`);
+export type MappingRunListItem = {
+  mappingRunId: string;
+  mappingName: string | null;
+  status: string;
+  projectId: string;
+  projectName: string;
+  sourceFilename: string | null;
+  targetFilename: string | null;
+  totalSourceFields: number;
+  mappedFields: number;
+  confirmedFieldCount: number;
+  keyFieldCount: number;
+  createdAt: string | null;
+};
+
+export async function fetchMappingRuns(options?: {
+  projectId?: string;
+  limit?: number;
+}): Promise<MappingRunListItem[]> {
+  const params: Record<string, string | number> = { limit: options?.limit ?? 50 };
+  if (options?.projectId) params.project_id = options.projectId;
+
+  const { data } = await apiClient.get<MappingRunListItem[]>("/api/mappings/", {
+    params,
+  });
   return data;
+}
+
+export async function listMappingRuns(projectId: string) {
+  return fetchMappingRuns({ projectId });
 }
 
 export async function fetchMappingRunResult(

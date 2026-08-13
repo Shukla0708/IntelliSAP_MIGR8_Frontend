@@ -50,12 +50,6 @@ export const SIDEBAR_ACTIVITY: NavItem[] = [
     icon: "hub",
     matchPrefixes: ["/activity/mappings"],
   },
-  {
-    label: "Reports",
-    href: "/activity/reports",
-    icon: "analytics",
-    matchPrefixes: ["/activity/reports"],
-  },
 ];
 
 /** Tools scoped to the currently selected project */

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SectionCard } from "@/components/dashboard/kpi-card";
 import { ProjectPickerDialog } from "@/components/projects/project-picker-dialog";
 import { AddIcon, HubIcon, SearchIcon } from "@/components/ui/icons";
@@ -11,6 +11,7 @@ import {
   type FieldMappingRun,
   type FieldMappingRunStatus,
 } from "@/data/field-mapping";
+import { fetchMappingRuns, type MappingRunListItem } from "@/lib/mapping-api";
 
 const statusStyles: Record<
   FieldMappingRunStatus,
@@ -26,7 +27,7 @@ export type ActivityMappingRun = FieldMappingRun & {
   projectName: string;
 };
 
-/** Mock cross-project mappings until mapping API exists */
+/** Mock cross-project mappings still backing the dashboard KPI cards */
 export const ACTIVITY_MAPPING_RUNS: ActivityMappingRun[] = [
   {
     ...PREVIOUS_FIELD_MAPPING_RUNS[0],
@@ -45,38 +46,47 @@ export const ACTIVITY_MAPPING_RUNS: ActivityMappingRun[] = [
   },
 ];
 
+function toRunStatus(status: string): FieldMappingRunStatus {
+  if (status === "completed" || status === "failed") return status;
+  return "running";
+}
+
 export function ActivityMappingsList() {
   const { projects } = useProject();
+  const [runs, setRuns] = useState<MappingRunListItem[] | null>(null);
   const [projectFilter, setProjectFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const projectNames = useMemo(() => {
-    const fromRuns = ACTIVITY_MAPPING_RUNS.map((run) => ({
-      id: run.projectId,
-      name: run.projectName,
-    }));
-    const seen = new Set<string>();
-    return [...fromRuns, ...projects.map((p) => ({ id: p.id, name: p.name }))].filter(
-      (p) => {
-        if (seen.has(p.id)) return false;
-        seen.add(p.id);
-        return true;
-      },
-    );
-  }, [projects]);
+  const loading = runs === null;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchMappingRuns({
+      projectId: projectFilter !== "all" ? projectFilter : undefined,
+      limit: 100,
+    })
+      .then((data) => {
+        if (!cancelled) setRuns(data);
+      })
+      .catch(() => {
+        if (!cancelled) setRuns([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectFilter]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return ACTIVITY_MAPPING_RUNS.filter((run) => {
-      if (projectFilter !== "all" && run.projectId !== projectFilter) return false;
-      if (!q) return true;
-      return (
-        run.name.toLowerCase().includes(q) ||
-        run.projectName.toLowerCase().includes(q)
-      );
+    if (!q) return runs ?? [];
+    return (runs ?? []).filter((run) => {
+      const name = (run.mappingName ?? "").toLowerCase();
+      return name.includes(q) || run.projectName.toLowerCase().includes(q);
     });
-  }, [projectFilter, search]);
+  }, [runs, search]);
 
   return (
     <div className="mx-auto w-full max-w-[1200px]">
@@ -119,7 +129,7 @@ export function ActivityMappingsList() {
             className="h-11 w-full rounded border border-outline-variant bg-surface-container-lowest px-3 text-sm font-semibold text-on-surface outline-none focus:border-primary focus:ring-1 focus:ring-primary sm:min-w-[220px]"
           >
             <option value="all">All projects</option>
-            {projectNames.map((project) => (
+            {projects.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}
               </option>
@@ -135,17 +145,29 @@ export function ActivityMappingsList() {
           </h3>
         </div>
         <div className="divide-y divide-outline-variant">
-          {filtered.length === 0 && (
+          {loading && (
+            <p className="p-4 text-sm text-on-surface-variant">Loading runs…</p>
+          )}
+
+          {!loading && filtered.length === 0 && (
             <p className="p-4 text-sm text-on-surface-variant">
               No field mappings yet across your projects.
             </p>
           )}
+
           {filtered.map((run) => {
-            const status = statusStyles[run.status];
+            const status = statusStyles[toRunStatus(run.status)];
+            const unmapped = Math.max(run.totalSourceFields - run.mappedFields, 0);
+            const created = run.createdAt ? new Date(run.createdAt) : null;
+            const ranAt =
+              created && !Number.isNaN(created.getTime())
+                ? created.toLocaleString()
+                : "Not run yet";
+
             return (
               <Link
-                key={run.id}
-                href={`/field-mapping/${run.id}`}
+                key={run.mappingRunId}
+                href={`/field-mapping/${run.mappingRunId}`}
                 className="flex flex-col gap-3 p-4 transition-colors hover:bg-surface-container-low sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex items-center gap-4">
@@ -154,18 +176,18 @@ export function ActivityMappingsList() {
                   </div>
                   <div>
                     <p className="text-base font-semibold leading-6 text-on-surface">
-                      {run.name}
+                      {run.mappingName || "New field mapping run"}
                     </p>
                     <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
                       <span className="rounded bg-surface-container-high px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">
                         {run.projectName}
                       </span>
                       <span className="font-mono text-xs font-medium leading-4 text-on-surface-variant">
-                        {run.fields}
+                        {run.totalSourceFields} fields
                       </span>
                       <span className="text-xs text-outline">•</span>
                       <span className="font-mono text-xs font-medium leading-4 text-on-surface-variant">
-                        {run.ranAt}
+                        {ranAt}
                       </span>
                     </div>
                   </div>
@@ -178,10 +200,10 @@ export function ActivityMappingsList() {
                   </span>
                   <span
                     className={`font-mono text-xs font-medium ${
-                      run.unmapped > 0 ? "text-tertiary" : "text-on-surface-variant"
+                      unmapped > 0 ? "text-tertiary" : "text-on-surface-variant"
                     }`}
                   >
-                    {run.unmapped} unmapped
+                    {unmapped} unmapped
                   </span>
                 </div>
               </Link>
