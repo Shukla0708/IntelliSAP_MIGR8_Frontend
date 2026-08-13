@@ -43,7 +43,10 @@ export function FieldMappingSetupView() {
     setNumberRangeDialogOpen(true);
   }
 
-  async function handleNumberRangeConfirm(numberRangeType: NumberRangeType) {
+  async function handleNumberRangeConfirm(
+    numberRangeType: NumberRangeType,
+    mappingName: string,
+  ) {
     setNumberRangeDialogOpen(false);
 
     if (!project || !sourceFile || !targetFile) return;
@@ -55,6 +58,7 @@ export function FieldMappingSetupView() {
         sourceFile,
         targetFile,
         numberRangeType,
+        mappingName,
       );
       router.push(`/field-mapping/${result.mappingRunId}`);
     } catch (err) {

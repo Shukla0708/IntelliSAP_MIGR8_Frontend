@@ -27,6 +27,7 @@ export type MappingRowApi = {
 
 export type MappingRunResult = {
   mappingRunId: string;
+  mappingName: string | null;
   status: string;
   numberRangeType: NumberRangeType | null;
   sourceFilename: string | null;
@@ -41,9 +42,13 @@ export async function createMappingRun(
   sourceFile: File,
   targetFile: File,
   numberRangeType: NumberRangeType,
+  mappingName?: string,
 ): Promise<MappingRunResult> {
   const formData = new FormData();
   formData.append("number_range_type", numberRangeType);
+  if (mappingName?.trim()) {
+    formData.append("mapping_name", mappingName.trim());
+  }
   formData.append("source_file", sourceFile);
   formData.append("target_file", targetFile);
 
@@ -59,6 +64,35 @@ export async function fetchMappingRunResult(
 ): Promise<MappingRunResult> {
   const { data } = await apiClient.get<MappingRunResult>(
     `/api/mappings/${runId}/result`,
+  );
+  return data;
+}
+
+export async function renameMappingRun(
+  runId: string,
+  mappingName: string,
+): Promise<string> {
+  const { data } = await apiClient.patch<{ mappingName: string }>(
+    `/api/mappings/${runId}`,
+    { mapping_name: mappingName.trim() },
+  );
+  return data.mappingName;
+}
+
+export type TargetFieldOption = {
+  targetField: string;
+  sapTable: string;
+  sapField: string;
+  targetDescription: string | null;
+  datatype: string | null;
+};
+
+/** Every SAP field in the run's uploaded target list — not just the AI's top 3. */
+export async function fetchMappingTargetFields(
+  runId: string,
+): Promise<TargetFieldOption[]> {
+  const { data } = await apiClient.get<TargetFieldOption[]>(
+    `/api/mappings/${runId}/target-fields`,
   );
   return data;
 }
@@ -136,9 +170,10 @@ export function toFieldMappingWorkspace(
   return {
     id: result.mappingRunId,
     runName:
-      result.sourceFilename && result.targetFilename
+      result.mappingName ||
+      (result.sourceFilename && result.targetFilename
         ? `${result.sourceFilename} → ${result.targetFilename}`
-        : "Field mapping run",
+        : "Field mapping run"),
     projectName,
     rows,
     defaultActiveRowId: rows[0]?.id ?? "",

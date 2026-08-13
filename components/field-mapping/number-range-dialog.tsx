@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { TextField } from "@/components/ui/text-field";
 import type { NumberRangeType } from "@/lib/mapping-api";
 
 type NumberRangeOption = {
@@ -29,7 +30,7 @@ const OPTIONS: NumberRangeOption[] = [
 type NumberRangeDialogProps = {
   open: boolean;
   onClose: () => void;
-  onConfirm: (numberRangeType: NumberRangeType) => void;
+  onConfirm: (numberRangeType: NumberRangeType, mappingName: string) => void;
 };
 
 export function NumberRangeDialog({
@@ -38,22 +39,25 @@ export function NumberRangeDialog({
   onConfirm,
 }: NumberRangeDialogProps) {
   const [selected, setSelected] = useState<NumberRangeType | null>(null);
+  const [mappingName, setMappingName] = useState("");
 
   function handleClose() {
     setSelected(null);
+    setMappingName("");
     onClose();
   }
 
   function handleConfirm() {
     if (!selected) return;
-    onConfirm(selected);
+    onConfirm(selected, mappingName.trim());
     setSelected(null);
+    setMappingName("");
   }
 
   return (
     <Dialog
       open={open}
-      title="Number Range"
+      title="Name & Number Range"
       onClose={handleClose}
       footer={
         <>
@@ -71,6 +75,21 @@ export function NumberRangeDialog({
         </>
       }
     >
+      <TextField
+        id="mapping-name"
+        label="Mapping Name"
+        placeholder="New field mapping run"
+        value={mappingName}
+        maxLength={120}
+        onChange={(event) => setMappingName(event.target.value)}
+        autoFocus
+        trailingLabel={
+          <span className="text-[10px] uppercase tracking-[0.02em] text-on-surface-variant">
+            Optional
+          </span>
+        }
+      />
+
       <p className="text-sm leading-6 text-on-surface-variant">
         Does this mapping follow an internal or external number range for its
         key field?

@@ -13,6 +13,8 @@ export type MappingProspect = {
   semanticSimilarity?: number | null;
   datatypeMatch?: number | null;
   reasoning?: string | null;
+  /** Picked by the user from the full target list instead of suggested by the AI. */
+  manual?: boolean;
 };
 
 export type FieldMappingRow = {
