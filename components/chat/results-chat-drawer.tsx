@@ -10,6 +10,7 @@ import {
   type ChatTurn,
 } from "@/lib/chat-api";
 import { getApiErrorMessage } from "@/lib/axios";
+import { FormattedChatReply } from "@/lib/format-chat-reply";
 
 function resolveChatContext(
   pathname: string,
@@ -30,14 +31,15 @@ function resolveChatContext(
   if (pathname.startsWith("/report")) {
     return { page: "report", project_id: projectId || undefined };
   }
-  return { page: "dashboard", project_id: projectId || undefined };
+  // Dashboard (and other global screens) — no project filter.
+  return { page: "dashboard" };
 }
 
 function contextLabel(page: ChatPage): string {
   if (page === "validation_result") return "This validation run";
   if (page === "mapping_result") return "This mapping run";
-  if (page === "report") return "Project report";
-  return "Dashboard";
+  if (page === "report") return "This project report";
+  return "All your projects";
 }
 
 export function ResultsChatDrawer() {
@@ -55,8 +57,7 @@ export function ResultsChatDrawer() {
     [pathname, params, selectedProject?.id],
   );
 
-  async function onSubmit(event: React.FormEvent) {
-    event.preventDefault();
+  async function sendMessage() {
     const message = input.trim();
     if (!message || pending) return;
     setInput("");
@@ -72,6 +73,17 @@ export function ResultsChatDrawer() {
     } finally {
       setPending(false);
     }
+  }
+
+  function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    void sendMessage();
+  }
+
+  function onInputKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    event.preventDefault();
+    void sendMessage();
   }
 
   return (
@@ -105,8 +117,9 @@ export function ResultsChatDrawer() {
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
             {turns.length === 0 ? (
               <p className="text-sm leading-6 text-on-surface-variant">
-                Ask about validation health, duplicate keys, failing fields, or
-                mapping confidence. I only answer from your current results.
+                Ask about any project — validation health, duplicate keys,
+                failing fields, or mapping confidence. On this screen I can
+                see all of your projects.
               </p>
             ) : null}
             {turns.map((turn, index) => (
@@ -114,11 +127,15 @@ export function ResultsChatDrawer() {
                 key={`${turn.role}-${index}`}
                 className={
                   turn.role === "user"
-                    ? "ml-8 rounded-2xl bg-primary/10 px-3 py-2 text-sm text-on-surface"
-                    : "mr-8 rounded-2xl bg-surface-container-high px-3 py-2 text-sm text-on-surface"
+                    ? "ml-8 rounded-2xl bg-primary/10 px-3 py-2 text-sm leading-6 text-on-surface"
+                    : "mr-4 rounded-2xl bg-surface-container-high px-3 py-2"
                 }
               >
-                {turn.content}
+                {turn.role === "assistant" ? (
+                  <FormattedChatReply text={turn.content} />
+                ) : (
+                  turn.content
+                )}
               </div>
             ))}
             {pending ? (
@@ -134,7 +151,8 @@ export function ResultsChatDrawer() {
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              placeholder="Ask about this project's results…"
+              onKeyDown={onInputKeyDown}
+              placeholder="Ask about this project's results… (Enter to send)"
               rows={2}
               className="min-h-[44px] flex-1 resize-none rounded-xl border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
             />
