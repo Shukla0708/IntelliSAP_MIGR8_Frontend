@@ -426,7 +426,7 @@ Notes:
 | Prop | Type | Use |
 | --- | --- | --- |
 | `children` | `ReactNode` | Main page content |
-| `topbarTitle` | `string?` | Replaces search bar with a page title |
+| `topbarTitle` | `string?` | Page title on the left of the topbar |
 | `topbarLeading` | `ReactNode?` | Custom breadcrumb / project label (validation, field-mapping workspace, comparison routes) |
 | `mainClassName` | `string?` | Override main padding/layout (e.g. sticky footers on validation/field-mapping) |
 
@@ -481,6 +481,10 @@ npm run lint     # ESLint
 ---
 
 ## Session Log
+
+### 2026-08-14 — Remove dead topbar search
+
+- Dropped the unwired “Search migrations…” input from `AppTopbar`. `/projects` and `/dashboard` now pass `topbarTitle` instead.
 
 ### 2026-08-14 — Skip project picker on Current project New
 
