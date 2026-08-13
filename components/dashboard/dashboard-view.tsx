@@ -16,8 +16,8 @@ import {
 import { useProject } from "@/contexts/project-context";
 import apiClient from "@/lib/axios";
 import {
-  listComparisons,
-  type ComparisonListItem,
+  fetchComparisonRuns,
+  type ComparisonRunListItem,
 } from "@/lib/comparison-api";
 import type { KpiMetric, RecentProject } from "@/data/dashboard";
 
@@ -65,7 +65,7 @@ export function DashboardView() {
   const router = useRouter();
   const { projects, selectProject, loading: projectsLoading } = useProject();
   const [runs, setRuns] = useState<ActivityValidationRun[]>([]);
-  const [comparisons, setComparisons] = useState<ComparisonListItem[]>([]);
+  const [comparisons, setComparisons] = useState<ComparisonRunListItem[]>([]);
   const [runsLoading, setRunsLoading] = useState(true);
 
   useEffect(() => {
@@ -81,7 +81,7 @@ export function DashboardView() {
       .finally(() => {
         if (!cancelled) setRunsLoading(false);
       });
-    listComparisons()
+    fetchComparisonRuns({ limit: 100 })
       .then((rows) => {
         if (!cancelled) setComparisons(rows);
       })
@@ -197,7 +197,7 @@ export function DashboardView() {
       id: `cmp-${run.id}`,
       type: "comparison",
       name: run.name,
-      projectName: run.project_name,
+      projectName: run.projectName,
       href: `/compare/${run.id}`,
       meta: `${run.mismatches} mismatches`,
     }));
