@@ -1,13 +1,14 @@
 "use client";
 
 import type { ChangeEvent } from "react";
-import { useRef, useState } from "react";
-import { DescriptionIcon, UploadFileIcon } from "@/components/ui/icons";
+import { useRef } from "react";
+import { UploadFileIcon } from "@/components/ui/icons";
 import type { ReconciliationUploadCard } from "@/data/comparison";
 
 type ReconciliationUploadPanelProps = {
   card: ReconciliationUploadCard;
-  showMetadata: boolean;
+  file: File | null;
+  onFileSelected: (file: File) => void;
 };
 
 const accentStyles = {
@@ -15,51 +16,32 @@ const accentStyles = {
     borderHover: "hover:border-primary",
     iconBg: "bg-primary-container/10 group-hover:bg-primary-container/20",
     iconText: "text-primary",
-    button:
-      "border-primary text-primary hover:bg-primary-container/10",
-    metadataBorderHover: "hover:border-primary",
-    metadataIcon: "text-primary",
+    button: "border-primary text-primary hover:bg-primary-container/10",
   },
   secondary: {
     borderHover: "hover:border-secondary",
     iconBg: "bg-secondary/10 group-hover:bg-secondary/20",
     iconText: "text-secondary",
     button: "border-secondary text-secondary hover:bg-secondary/10",
-    metadataBorderHover: "hover:border-secondary",
-    metadataIcon: "text-secondary",
   },
 };
 
 export function ReconciliationUploadPanel({
   card,
-  showMetadata,
+  file,
+  onFileSelected,
 }: ReconciliationUploadPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const metadataInputRef = useRef<HTMLInputElement>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [metadataFileName, setMetadataFileName] = useState<string | null>(null);
   const styles = accentStyles[card.accent];
 
   function handleFileSelect() {
     fileInputRef.current?.click();
   }
 
-  function handleMetadataSelect() {
-    metadataInputRef.current?.click();
-  }
-
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setFileName(file.name);
-    console.info(`${card.id} file selected`, { name: file.name });
-  }
-
-  function handleMetadataChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setMetadataFileName(file.name);
-    console.info(`${card.id} metadata selected`, { name: file.name });
+    const selected = event.target.files?.[0];
+    if (selected) onFileSelected(selected);
+    event.target.value = "";
   }
 
   return (
@@ -91,7 +73,7 @@ export function ReconciliationUploadPanel({
       <input
         ref={fileInputRef}
         type="file"
-        accept=".csv,.xlsx,.json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/json"
+        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         className="hidden"
         onChange={handleFileChange}
         onClick={(event) => event.stopPropagation()}
@@ -108,40 +90,10 @@ export function ReconciliationUploadPanel({
         {card.buttonLabel}
       </button>
 
-      {fileName ? (
+      {file ? (
         <p className="mt-3 font-mono text-xs text-on-surface-variant">
-          Selected: {fileName}
+          Selected: {file.name}
         </p>
-      ) : null}
-
-      {showMetadata ? (
-        <div
-          className="metadata-section mt-6 w-full border-t border-outline-variant/50 pt-6"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.02em] text-on-surface-variant">
-            {card.metadataLabel}
-          </p>
-
-          <input
-            ref={metadataInputRef}
-            type="file"
-            accept=".csv,.json,text/csv,application/json"
-            className="hidden"
-            onChange={handleMetadataChange}
-          />
-
-          <button
-            type="button"
-            onClick={handleMetadataSelect}
-            className={`flex w-full items-center justify-center gap-3 rounded-lg border border-outline-variant bg-surface-container-low px-4 py-2 transition-colors ${styles.metadataBorderHover}`}
-          >
-            <DescriptionIcon className={`h-4 w-4 ${styles.metadataIcon}`} />
-            <span className="text-[13px] leading-[18px] text-on-surface-variant">
-              {metadataFileName ?? card.metadataPlaceholder}
-            </span>
-          </button>
-        </div>
       ) : null}
     </div>
   );

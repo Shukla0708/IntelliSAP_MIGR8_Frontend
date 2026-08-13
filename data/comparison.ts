@@ -1,4 +1,4 @@
-export type ComparisonRunStatus = "completed" | "failed" | "running";
+export type ComparisonRunStatus = "draft" | "completed" | "failed" | "running";
 
 export type ComparisonRun = {
   id: string;
@@ -17,8 +17,6 @@ export type ReconciliationUploadCard = {
   title: string;
   description: string;
   buttonLabel: string;
-  metadataLabel: string;
-  metadataPlaceholder: string;
   accent: "primary" | "secondary";
 };
 
@@ -26,20 +24,15 @@ export const RECONCILIATION_UPLOAD_CARDS: ReconciliationUploadCard[] = [
   {
     id: "preload",
     title: "Upload Preload File",
-    description:
-      "Drag and drop or click to select source extraction (CSV, XLSX)",
+    description: "Drag and drop or click to select source extraction (XLSX)",
     buttonLabel: "Select File",
-    metadataLabel: "Upload Preload Field Metadata",
-    metadataPlaceholder: "Select metadata file (JSON, CSV)",
     accent: "primary",
   },
   {
     id: "postload",
     title: "Upload Postload File",
-    description: "Drag and drop or click to select target load (CSV, XLSX)",
+    description: "Drag and drop or click to select target load (XLSX)",
     buttonLabel: "Select File",
-    metadataLabel: "Upload Postload Field Metadata",
-    metadataPlaceholder: "Select metadata file (JSON, CSV)",
     accent: "secondary",
   },
 ];

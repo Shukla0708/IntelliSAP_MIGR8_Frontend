@@ -12,7 +12,7 @@
 | Package name | `migr8-ai-frontend` |
 | Repo path | `MIGR8_AI_frontend/` (workspace: `MIGR8 AI frontend`) |
 | Purpose | Frontend for MIGR8 AI — SAP data migration assistant (UI from Google Stitch) |
-| Status | Dual-scope nav: **Activity** (all my projects) + **Current project** tools; JWT auth; validation live; field-mapping / comparison mostly mock |
+| Status | Dual-scope nav: **Activity** (all my projects) + **Current project** tools; JWT auth; validation and comparison live; field mapping still mock |
 | Design source | Stitch project **Remix of MIGR8 AI Migration Assistant** (`11703829461598989849`) |
 | Git | `main` — UI flows + axios; auth/validation/projects API wiring; dual-scope Activity hubs |
 | API base | `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8000`) |
@@ -35,14 +35,14 @@
 | Design tooling | **Stitch MCP** (`@_davideast/stitch-mcp`) | Source of truth for UI |
 | HTTP client | **Axios 1.x** | Shared instance in `lib/axios.ts` |
 | Excel parsing (client) | **xlsx** (SheetJS) | Header extraction only on `/validation/new` before API persist |
-| Backend | **Python FastAPI** | Auth, projects, validation live; field-mapping / comparison APIs TBD |
+| Backend | **Python FastAPI** | Auth, projects, validation, comparison live; field-mapping API TBD |
 
 ### Explicit non-choices (for now)
 
 - No `src/` directory — app lives at project root (`app/`)
 - No third-party UI kit (custom components only)
 - No state library or testing setup yet
-- Auth is real (JWT via FastAPI); domain screens (validation live; mapping/compare still mock/static for project lists)
+- Auth is real (JWT via FastAPI); domain screens: validation and comparison live, field mapping still mock/static
 - **Dual-scope IA:** browse globally under Activity; create/execute always project-bound via selected project + picker
 
 ---
@@ -59,12 +59,12 @@ Public (no JWT): `/sign-in`, `/register`. All other product routes live under `a
 | `/dashboard` | `app/(app)/dashboard/page.tsx` | `DashboardView` | Global KPIs + recent activity (live validations) |
 | `/projects` | `app/(app)/projects/page.tsx` | `ProjectsView` | Protected |
 | `/activity/validations` | `app/(app)/activity/validations/page.tsx` | `ActivityValidationsList` | All my validations; Project column + filters |
-| `/activity/comparisons` | `app/(app)/activity/comparisons/page.tsx` | `ActivityComparisonsList` | Cross-project comparisons (mock until API) |
+| `/activity/comparisons` | `app/(app)/activity/comparisons/page.tsx` | `ActivityComparisonsList` | Cross-project comparisons (live) |
 | `/activity/mappings` | `app/(app)/activity/mappings/page.tsx` | `ActivityMappingsList` | Cross-project mappings (mock until API) |
 | `/activity/reports` | `app/(app)/activity/reports/page.tsx` | `ActivityReportsList` | Stub |
 | `/compare` | `app/(app)/compare/page.tsx` | `ComparisonRunsList` | Project-scoped prior runs + **New Comparison** |
 | `/compare/new` | `app/(app)/compare/new/page.tsx` | `ComparisonSetupView` | Reconciliation upload; from New Comparison |
-| `/compare/[id]` | `app/(app)/compare/[id]/page.tsx` | `ReconciliationReviewView` | Exception review; `generateStaticParams` |
+| `/compare/[id]` | `app/(app)/compare/[id]/page.tsx` | `ReconciliationReviewView` | Exception review; client page fetching the run result |
 | `/field-mapping` | `app/(app)/field-mapping/page.tsx` | `FieldMappingRunsList` | Project-scoped prior runs + **New Field Mapping** |
 | `/field-mapping/new` | `app/(app)/field-mapping/new/page.tsx` | `FieldMappingSetupView` + `SchemaUploadPanel` | Source/target upload + SAP fetch; topbar title |
 | `/field-mapping/[id]` | `app/(app)/field-mapping/[id]/page.tsx` | `FieldMappingWorkspaceView` | Multi-prospect mapping workspace; `generateStaticParams` |
@@ -93,7 +93,7 @@ Public (no JWT): `/sign-in`, `/register`. All other product routes live under `a
    - `/field-mapping` (project-scoped, **live** via `GET /api/mappings/?project_id=`) → detail `/field-mapping/{id}` (real `mappingRunId`, live); create gated by project picker → `/field-mapping/new` → number-range dialog → `/field-mapping/{mappingRunId}`
    - `/activity/mappings` (cross-project) is still mock (`PREVIOUS_FIELD_MAPPING_RUNS`) — no cross-project mapping-runs API yet
 9. **Comparison flow:**
-   - `/compare` or `/activity/comparisons` → detail `/compare/{id}`; create gated by project picker → `/compare/new` → `/compare/cmp-new`
+   - `/compare` or `/activity/comparisons` → completed runs open `/compare/{id}`; create gated by project picker → `/compare/new` → `/compare/{runId}` once the run finishes
 10. Validation sidebar (project) stays active on `/validation*` and `/validation_result*`.
 11. Activity → Validations stays active on `/activity/validations*`.
 12. Field Mapping / Comparison project + activity items use their respective prefixes.
@@ -138,14 +138,9 @@ Defined in `data/dashboard.ts` (`SIDEBAR_OVERVIEW`, `SIDEBAR_ACTIVITY`, `SIDEBAR
 | `map-003` | `PREVIOUS_FIELD_MAPPING_RUNS` | Payment terms mapping |
 | `map-new` | `LATEST_FIELD_MAPPING_RUN_ID` | Unused by the live flow now — kept for the mock fixtures above |
 
-### Mock comparison run IDs
+### Comparison run IDs
 
-| ID | Source | Notes |
-| --- | --- | --- |
-| `cmp-001` | `PREVIOUS_COMPARISON_RUNS` | Customer Master — postload vs preload |
-| `cmp-002` | `PREVIOUS_COMPARISON_RUNS` | Material Master reconciliation |
-| `cmp-003` | `PREVIOUS_COMPARISON_RUNS` | Vendor Master delta check |
-| `cmp-new` | `LATEST_COMPARISON_RUN_ID` | Target after **Run Reconciliation** |
+Comparison runs are live: IDs are backend UUIDs from `POST /api/comparisons/`. `PREVIOUS_COMPARISON_RUNS` / `RECONCILIATION_REVIEWS_BY_ID` / `ACTIVITY_COMPARISON_RUNS` still exist but now only feed the dashboard KPI cards and the project report preview.
 
 ---
 
@@ -173,11 +168,12 @@ Submitting opens `NumberRangeDialog` (`components/field-mapping/number-range-dia
 
 | Card | Key UI |
 | --- | --- |
-| Upload Preload File | Dashed upload zone (primary) — **Select File** |
-| Upload Postload File | Dashed upload zone (secondary) — **Select File** |
-| Conditional metadata | **Have Field Mapping?** checkbox reveals per-card metadata upload (JSON, CSV) |
+| Run name | Text input — required, unique per project (duplicate → 409) |
+| Upload Preload File | Dashed upload zone (primary) — **Select File**, `.xlsx` only |
+| Upload Postload File | Dashed upload zone (secondary) — **Select File**, `.xlsx` only |
+| Conditional mapping | **Have Field Mapping?** checkbox reveals a select of confirmed mappings in the project, labelled with field and key counts |
 
-Topbar: project name breadcrumb (`COMPARISON_PROJECT_NAME`). **Run Reconciliation** → `/compare/cmp-new`.
+Both files stay in the browser until **Run Reconciliation**, which then chains create → upload → execute (`runComparison()` in `lib/comparison-api.ts`) and navigates to `/compare/{runId}`. Without a mapping the backend compares columns that share a name; with one it uses the mapping's key fields (`final_mapping.key`) as the composite business key. Execute uses a 10 minute client timeout because it runs synchronously.
 
 ### Validation setup (`/validation/new` and `/validation/[id]`)
 
@@ -205,7 +201,9 @@ Notes:
 | --- | --- |
 | Summary cards | Matched Records, Different, Missing |
 | Discrepancy table | Business Key, Field, Preload/Postload values, Difference Type, Status |
-| Actions | Download Comparison Report (mock), View Exceptions (scroll to table) |
+| Actions | Download Comparison Report (`GET /api/comparisons/{id}/download-url` → `window.open`), View Exceptions (scroll to table) |
+
+Client page: fetches `GET /api/comparisons/{id}/result` on mount, same shape as `ReconciliationReviewSummary`. The report is the preload workbook with failing cells filled red and a `Comparison_Failure_Detail` column appended.
 
 ---
 
@@ -299,8 +297,8 @@ MIGR8_AI_frontend/
 │       └── password-strength-meter.tsx
 ├── data/
 │   ├── dashboard.ts             # Nav, KPIs, recent projects, readiness
-│   ├── comparison.ts            # Runs, reconciliation upload cards, project name
-│   ├── comparison-results.ts    # Review summaries, discrepancies, mock run IDs
+│   ├── comparison.ts            # Status/run types, reconciliation upload cards (mock runs feed the dashboard only)
+│   ├── comparison-results.ts    # Review + discrepancy types; fixtures now only feed the dashboard/report
 │   ├── field-mapping.ts         # Runs, schema cards (incl. sapFetch), topbar title
 │   ├── field-mapping-workspace.ts # Workspace rows, prospects, AI review mock data
 │   ├── validation.ts            # Runs, field rules, rule config types
@@ -314,6 +312,8 @@ MIGR8_AI_frontend/
 │   ├── auth-api.ts              # login / register / fetchMe
 │   ├── auth-storage.ts          # localStorage + migr8_token cookie sync
 │   ├── auth-types.ts            # AuthUser / AuthResponse types
+│   ├── comparison-api.ts        # list/create/upload/execute/result/download + runComparison
+│   ├── comparison-routes.ts     # comparisonRunHref — only completed runs are linkable
 │   ├── parse-source-headers.ts  # Client-side Excel/CSV header extraction for validation
 │   ├── project-report-api.ts    # fetchProjectReport — API + mock compare/map merge
 │   ├── chat-api.ts              # POST /api/chat grounded results assistant
@@ -371,7 +371,7 @@ await apiClient.post("/api/auth/login", { email, password });
 | Dashboard KPIs / recent activity | Live for projects + validations; compare still mock-augmented |
 | Project report (`GET /api/projects/{id}/report` + mock merge) | Live validation KPIs; compare preview from fixtures (mapping preview also still reads mock `FIELD_MAPPING_WORKSPACES`, not the live API — see Open Questions) |
 | Field mapping (`/field-mapping` list, `/field-mapping/new` create, `/field-mapping/[id]` workspace, confirm) | **Live** — `lib/mapping-api.ts` end to end; `/activity/mappings` (cross-project) still mock |
-| Comparison (project + activity lists) | UI mock (friend's screens) until APIs exist |
+| Comparison list / setup / review / download (`/api/comparisons/*`) | **Live** — `lib/comparison-api.ts` end to end |
 
 `AppProviders` wraps `AuthProvider` → `ProjectProvider`. Validation uses `useDefaultProject()` which reads the selected project from context. **Browse** can be global; **create** always confirms a project via `ProjectPickerDialog`.
 
@@ -494,6 +494,15 @@ npm run lint     # ESLint
 - Added a "Key Field" badge (from `row.keyField`) and an "Approved" badge (from `row.confirmed`, derived from the API's `confirmedTargetField`) next to each source field name in the mapping table.
 - Replaced `ManualTargetPicker`'s type-to-filter box (which showed nothing until you typed) with a button that opens a `Dialog` (`components/ui/dialog.tsx`) listing **every** target field with its description; an optional search box inside the dialog narrows the list, but browsing without typing now works.
 - Backend contract addition consumed here: `GET /{run_id}/result` rows now include `confirmedTargetField` (see backend `Project.md`).
+
+### 2026-08-13 — Comparison wired to the backend
+
+- New `lib/comparison-api.ts` (list, create, paired upload, execute, result, download URL, plus a `runComparison()` chain) and `lib/comparison-routes.ts`.
+- `/compare/new` now takes a run name, stages two `.xlsx` files locally, and optionally picks a confirmed field mapping; **Run Reconciliation** creates the run, uploads, executes, and navigates to the result.
+- `/compare` and `/activity/comparisons` fetch `GET /api/comparisons/`; only completed runs link to a review page.
+- `/compare/[id]` became a client page fetching `GET /api/comparisons/{id}/result`; the download button opens the annotated preload report.
+- `ComparisonRunStatus` gained `draft`; the per-card metadata upload was replaced by the mapping select, since keys now come from `final_mapping.key` (flagged in the uploaded source schema, carried over on confirm).
+- `fetchMappingOptions()` reads `GET /api/mappings/` (`mappingRunId` / `mappingName` plus `confirmedFieldCount` / `keyFieldCount`) and keeps only completed mappings that have confirmed fields.
 
 ### 2026-08-13 — Project report screen (`/report`)
 
@@ -689,9 +698,11 @@ npm run lint     # ESLint
 ## Open Questions / TBD
 
 - Wire remaining sidebar routes: Settings
-- Wire compare API; replace `/activity/comparisons` and `/activity/mappings` mock lists (project-scoped field mapping is already wired)
+- Replace the `/activity/mappings` mock list (project-scoped field mapping and both comparison lists are already wired)
 - `data/project-report.ts`'s mapping-preview aggregation still reads mock `FIELD_MAPPING_WORKSPACES`/`aiReview`, not the live `/api/mappings` data — reconcile once the report screen needs real mapping KPIs
 - No per-run "list/edit confirmed fields" UI beyond reopening the workspace (matches backend: no un-confirm endpoint yet either)
+- Point the dashboard KPIs and project report at real comparison data instead of `ACTIVITY_COMPARISON_RUNS` / `RECONCILIATION_REVIEWS_BY_ID`
+- Comparison drafts (upload without execute) have no resume screen, so they render unlinked in the lists
 - httpOnly cookie / refresh tokens (currently Bearer + readable cookie for middleware)
 - Remove dead validation mock fixtures after cutover
 - Optional nested URLs `/projects/[id]/validation` later (flat routes + context for now)

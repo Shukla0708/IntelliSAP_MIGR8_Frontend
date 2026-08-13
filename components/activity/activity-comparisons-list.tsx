@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SectionCard } from "@/components/dashboard/kpi-card";
 import { ProjectPickerDialog } from "@/components/projects/project-picker-dialog";
 import { AddIcon, CompareIcon, SearchIcon } from "@/components/ui/icons";
@@ -11,11 +11,17 @@ import {
   type ComparisonRun,
   type ComparisonRunStatus,
 } from "@/data/comparison";
+import { fetchComparisonRuns, type ComparisonRunListItem } from "@/lib/comparison-api";
+import { comparisonRunHref } from "@/lib/comparison-routes";
 
 const statusStyles: Record<
   ComparisonRunStatus,
   { label: string; className: string }
 > = {
+  draft: {
+    label: "Draft",
+    className: "bg-surface-container-high text-on-surface-variant",
+  },
   completed: { label: "Completed", className: "bg-success/10 text-success" },
   failed: { label: "Failed", className: "bg-error-container text-error" },
   running: { label: "Running", className: "bg-primary-container/10 text-primary" },
@@ -26,7 +32,7 @@ export type ActivityComparisonRun = ComparisonRun & {
   projectName: string;
 };
 
-/** Mock cross-project comparisons until compare API exists */
+/** Mock cross-project comparisons still backing the dashboard KPI cards */
 export const ACTIVITY_COMPARISON_RUNS: ActivityComparisonRun[] = [
   {
     ...PREVIOUS_COMPARISON_RUNS[0],
@@ -47,36 +53,41 @@ export const ACTIVITY_COMPARISON_RUNS: ActivityComparisonRun[] = [
 
 export function ActivityComparisonsList() {
   const { projects } = useProject();
+  const [runs, setRuns] = useState<ComparisonRunListItem[] | null>(null);
   const [projectFilter, setProjectFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const projectNames = useMemo(() => {
-    const fromRuns = ACTIVITY_COMPARISON_RUNS.map((run) => ({
-      id: run.projectId,
-      name: run.projectName,
-    }));
-    const seen = new Set<string>();
-    return [...fromRuns, ...projects.map((p) => ({ id: p.id, name: p.name }))].filter(
-      (p) => {
-        if (seen.has(p.id)) return false;
-        seen.add(p.id);
-        return true;
-      },
-    );
-  }, [projects]);
+  const loading = runs === null;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchComparisonRuns({
+      projectId: projectFilter !== "all" ? projectFilter : undefined,
+      limit: 100,
+    })
+      .then((data) => {
+        if (!cancelled) setRuns(data);
+      })
+      .catch(() => {
+        if (!cancelled) setRuns([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectFilter]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return ACTIVITY_COMPARISON_RUNS.filter((run) => {
-      if (projectFilter !== "all" && run.projectId !== projectFilter) return false;
-      if (!q) return true;
-      return (
+    if (!q) return runs ?? [];
+    return (runs ?? []).filter(
+      (run) =>
         run.name.toLowerCase().includes(q) ||
-        run.projectName.toLowerCase().includes(q)
-      );
-    });
-  }, [projectFilter, search]);
+        run.projectName.toLowerCase().includes(q),
+    );
+  }, [runs, search]);
 
   return (
     <div className="mx-auto w-full max-w-[1200px]">
@@ -119,7 +130,7 @@ export function ActivityComparisonsList() {
             className="h-11 w-full rounded border border-outline-variant bg-surface-container-lowest px-3 text-sm font-semibold text-on-surface outline-none focus:border-primary focus:ring-1 focus:ring-primary sm:min-w-[220px]"
           >
             <option value="all">All projects</option>
-            {projectNames.map((project) => (
+            {projects.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}
               </option>
@@ -135,19 +146,21 @@ export function ActivityComparisonsList() {
           </h3>
         </div>
         <div className="divide-y divide-outline-variant">
-          {filtered.length === 0 && (
+          {loading && (
+            <p className="p-4 text-sm text-on-surface-variant">Loading runs…</p>
+          )}
+
+          {!loading && filtered.length === 0 && (
             <p className="p-4 text-sm text-on-surface-variant">
               No comparisons yet across your projects.
             </p>
           )}
+
           {filtered.map((run) => {
-            const status = statusStyles[run.status];
-            return (
-              <Link
-                key={run.id}
-                href={`/compare/${run.id}`}
-                className="flex flex-col gap-3 p-4 transition-colors hover:bg-surface-container-low sm:flex-row sm:items-center sm:justify-between"
-              >
+            const status = statusStyles[run.status] ?? statusStyles.draft;
+            const href = comparisonRunHref(run);
+            const body = (
+              <>
                 <div className="flex items-center gap-4">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-primary-container/10 text-primary">
                     <CompareIcon className="h-5 w-5" />
@@ -165,7 +178,7 @@ export function ActivityComparisonsList() {
                       </span>
                       <span className="text-xs text-outline">•</span>
                       <span className="font-mono text-xs font-medium leading-4 text-on-surface-variant">
-                        {run.ranAt}
+                        {run.ranAt ?? "Not run yet"}
                       </span>
                     </div>
                   </div>
@@ -184,7 +197,24 @@ export function ActivityComparisonsList() {
                     {run.mismatches} mismatches
                   </span>
                 </div>
+              </>
+            );
+
+            return href ? (
+              <Link
+                key={run.id}
+                href={href}
+                className="flex flex-col gap-3 p-4 transition-colors hover:bg-surface-container-low sm:flex-row sm:items-center sm:justify-between"
+              >
+                {body}
               </Link>
+            ) : (
+              <div
+                key={run.id}
+                className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                {body}
+              </div>
             );
           })}
         </div>
