@@ -34,6 +34,7 @@
 | Path alias | `@/*` → project root | Configured in `tsconfig.json` |
 | Design tooling | **Stitch MCP** (`@_davideast/stitch-mcp`) | Source of truth for UI |
 | HTTP client | **Axios 1.x** | Shared instance in `lib/axios.ts` |
+| Excel parsing (client) | **xlsx** (SheetJS) | Header extraction only on `/validation/new` before API persist |
 | Backend | **Python FastAPI** | Auth, projects, validation live; field-mapping / comparison APIs TBD |
 
 ### Explicit non-choices (for now)
@@ -68,8 +69,9 @@ Public (no JWT): `/sign-in`, `/register`. All other product routes live under `a
 | `/field-mapping/new` | `app/(app)/field-mapping/new/page.tsx` | `FieldMappingSetupView` + `SchemaUploadPanel` | Source/target upload + SAP fetch; topbar title |
 | `/field-mapping/[id]` | `app/(app)/field-mapping/[id]/page.tsx` | `FieldMappingWorkspaceView` | Multi-prospect mapping workspace; `generateStaticParams` |
 | `/validation` | `app/(app)/validation/page.tsx` | `ValidationRunsList` | Project-scoped prior runs + **New Validation** |
-| `/validation/new` | `app/(app)/validation/new/page.tsx` | `AdvancedValidationView` | Run name + rules table + upload zone |
-| `/validation_result/[id]` | `app/(app)/validation_result/[id]/page.tsx` | `ValidationResultsView` | Per-run results; `generateStaticParams` |
+| `/validation/new` | `app/(app)/validation/new/page.tsx` | `AdvancedValidationView` | Client-first wizard: name + local file staging + rules; persist on Save Draft / Run |
+| `/validation/[id]` | `app/(app)/validation/[id]/page.tsx` | `AdvancedValidationView` (edit) | Resume draft: edit rules, replace file, run without re-staging |
+| `/validation_result/[id]` | `app/(app)/validation_result/[id]/page.tsx` | `ValidationResultsView` | Per-run results; redirects drafts to `/validation/[id]` |
 | `/report` | `app/(app)/report/page.tsx` | `ProjectReportView` | Project-scoped migration report (validation live; compare/map preview) |
 
 ### App shell UX
@@ -83,8 +85,10 @@ Public (no JWT): `/sign-in`, `/register`. All other product routes live under `a
    - **Activity** — browse validations / comparisons / mappings / reports across all owned projects.
    - **Current project** — tools for the selected project (switcher in sidebar).
 7. **Validation flow:**
-   - Project: `/validation` → `/validation_result/{id}` or **New Validation** (project picker) → `/validation/new`
-   - Global: `/activity/validations` → same detail routes; **New Validation** opens project picker first
+   - Project: `/validation` → draft/runs open `/validation/{id}`; completed/failed open `/validation_result/{id}`; **New Validation** (project picker) → `/validation/new`
+   - Global: `/activity/validations` → same routing via `validationRunHref()` in `lib/validation-routes.ts`
+   - `/validation/new` stages name, file, and rules locally; **no DB row until Save Draft or Run Validation**
+   - `/validation/[id]` loads saved draft via `GET /api/runs/{id}`; can replace file or run without re-selecting from disk
 8. **Field Mapping flow:**
    - `/field-mapping` or `/activity/mappings` → detail `/field-mapping/{id}`; create gated by project picker → `/field-mapping/new` → `/field-mapping/map-new`
 9. **Comparison flow:**
@@ -160,6 +164,26 @@ Topbar: `AI Mapping: Upload Source & Target Schemas` (`FIELD_MAPPING_TOPBAR_TITL
 | Conditional metadata | **Have Field Mapping?** checkbox reveals per-card metadata upload (JSON, CSV) |
 
 Topbar: project name breadcrumb (`COMPARISON_PROJECT_NAME`). **Run Reconciliation** → `/compare/cmp-new`.
+
+### Validation setup (`/validation/new` and `/validation/[id]`)
+
+| Step | Key UI | Persistence |
+| --- | --- | --- |
+| Run name | `TextField` — unique per project, locks when file attached | Local on create; locked on edit |
+| Source file | `SourceUploadZone` — drag/drop or browse (`.xlsx`, `.xls`, `.csv`) | Local until save/run; edit shows saved filename + **Replace File** |
+| Column headers | Parsed in browser via `lib/parse-source-headers.ts` (`xlsx` + CSV first line) | Local on create; loaded from API on edit |
+| Rules table | `ValidationRulesTable` + **Define Rules** dialog; supports `initialRules` on edit | Local until save/run |
+| **Save Draft** | Sticky footer | Create: `persistValidationRun()`; Edit: `updateValidationDraft()` (upload only if new file) |
+| **Run Validation Rules** | Sticky footer | Save draft chain, then `POST /execute` → `/validation_result/{id}` |
+
+Routing:
+- List cards use `validationRunHref()` — `draft` / `rules_configured` → `/validation/{id}`; `completed` / `failed` / `running` → `/validation_result/{id}`
+- `/validation_result/{id}` redirects back to `/validation/{id}` if run is still a draft
+
+Notes:
+- Selecting a file on **create** does not call `POST /api/runs/`.
+- On **edit**, run validation works with the server-stored file (no local `File` required).
+- Re-saving or running with a newly selected file re-uploads via `POST /upload`.
 
 ### Comparison review (`/compare/[id]`)
 
@@ -274,7 +298,11 @@ MIGR8_AI_frontend/
 │   ├── auth-api.ts              # login / register / fetchMe
 │   ├── auth-storage.ts          # localStorage + migr8_token cookie sync
 │   ├── auth-types.ts            # AuthUser / AuthResponse types
-│   └── project-report-api.ts    # fetchProjectReport — API + mock compare/map merge
+│   ├── parse-source-headers.ts  # Client-side Excel/CSV header extraction for validation
+│   ├── project-report-api.ts    # fetchProjectReport — API + mock compare/map merge
+│   ├── validation-api.ts        # fetch/create/upload/rules/execute helpers
+│   ├── validation-routes.ts     # validationRunHref + isEditableValidationStatus
+│   └── use-default-project.ts   # Selected project for validation create flows
 ├── public/
 │   ├── brand/migr8-logo.png
 │   ├── avatars/user.png
@@ -342,9 +370,16 @@ await apiClient.post("/api/auth/login", { email, password });
 | Item | Value |
 | --- | --- |
 | Create | `POST /api/runs/?project_id={id}` with JSON body `{ "name": "<trimmed>" }` |
-| Uniqueness | Name must be unique **per project**; backend should return `409` with a clear `detail` if duplicate |
-| List | `GET /api/projects/{id}/runs` returns `name` (shown on `/validation`) |
-| UI | `/validation/new` requires name before source upload; name locks after upload succeeds |
+| Detail | `GET /api/runs/{run_id}` — name, status, `source_filename`, `has_source_file`, `fields[]` with rules |
+| Upload | `POST /api/runs/{run_id}/upload` — multipart `file` |
+| Rules | `PUT /api/runs/{run_id}/rules` — array of `FieldRuleIn` |
+| Execute | `POST /api/runs/{run_id}/execute` |
+| Uniqueness | Name must be unique **per project**; backend returns `409` with a clear `detail` if duplicate |
+| List | `GET /api/projects/{id}/runs` and `GET /api/runs/` return real statuses (`draft`, `rules_configured`, etc.) |
+| UI staging | `/validation/new` requires name before file select; file + rules stay local until **Save Draft** or **Run Validation** |
+| UI edit | `/validation/[id]` loads draft via `fetchValidationRun()`; run without local file if `has_source_file` |
+| UI lock | Run name locks when a source file is attached (staged or saved) |
+| Frontend helpers | `persistValidationRun()`, `updateValidationDraft()`, `validationRunHref()` in `lib/` |
 
 Notes:
 - `NEXT_PUBLIC_` prefix is required for client components (`"use client"`).
@@ -436,6 +471,22 @@ npm run lint     # ESLint
 - Validation pillar uses live `GET /api/projects/{id}/report`; comparison/mapping use mock aggregates with **Preview data** badges.
 - Composite readiness: Validation 50% + Comparison 25% + Mapping 25% (client-side merge in `project-report-api.ts`).
 
+### 2026-08-13 — Resume validation drafts (`/validation/[id]`)
+
+- Backend: `GET /api/runs/{run_id}` returns run detail + field rules; list endpoints expose real `draft` / `rules_configured` statuses.
+- Frontend: new `/validation/[id]` edit route reuses `AdvancedValidationView` with `editRunId`.
+- Drafts open from list via `validationRunHref()`; completed runs still go to `/validation_result/{id}`.
+- Edit mode: load saved rules, show server filename, **Replace File**, run validation without re-staging local file.
+- `/validation_result/{id}` redirects editable drafts back to `/validation/{id}`.
+
+### 2026-08-13 — Deferred validation draft creation (client-first wizard)
+
+- `/validation/new` no longer creates a run on file select; `SourceUploadZone` parses headers locally via `lib/parse-source-headers.ts` (`xlsx` + CSV).
+- Added `lib/validation-api.ts` — `persistValidationRun()` chains `POST /api/runs/` → `POST /upload` → `PUT /rules`.
+- **Save Draft** is enabled; persists without execute. **Run Validation Rules** persists then `POST /execute`.
+- Run name locks after file is staged locally; duplicate names surface as `409` on save/run only.
+- Added `xlsx` dependency for client-side header extraction.
+
 ### 2026-08-13 — Dual-scope nav (Project work + Global activity)
 
 - Sidebar: **Overview** (Dashboard) + **Activity** (all my validations/comparisons/mappings/reports) + **Current project** tools with inline project switcher.
@@ -447,10 +498,10 @@ npm run lint     # ESLint
 
 ### 2026-08-13 — Unique validation run names
 
-- `/validation/new` collects a **Validation Run Name** before source upload.
-- `POST /api/runs/?project_id=...` now sends `{ name }`; upload disabled until name is non-empty.
-- Name field locks after a run is created/uploaded; duplicate names should surface backend `409` via `getApiErrorMessage`.
-- Documented create contract under API client section (backend still needs required `name` + unique `(project_id, name)`).
+- `/validation/new` collects a **Validation Run Name** before source file select.
+- `POST /api/runs/?project_id=...` sends `{ name }` on explicit save/run (not on file select).
+- Name field locks after a source file is staged; duplicate names surface backend `409` via `getApiErrorMessage` on save/run.
+- Documented create contract under API client section (backend enforces required `name` + unique `(project_id, name)`).
 
 ### 2026-08-13 — Profile logout
 
@@ -595,10 +646,12 @@ npm run lint     # ESLint
 10. **Protected product routes** — put authenticated pages under `app/(app)/`; keep `/sign-in` and `/register` public.
 11. **Selected project is global** — `ProjectProvider` is source of truth; validation must not invent a parallel project ID.
 12. **Validation run names are user-provided and unique per project** — UI requires `name` on create; backend must enforce uniqueness (prefer `409` on conflict).
-13. **Dual-scope IA** — Activity hubs browse across all owned projects; Current project tools do day-to-day work; create/execute always requires an explicit project (picker or selected).
-14. **Global lists are per signed-in user only** — no cross-user/org sharing until a sharing model exists.
-15. **Keep `Project.md` current** — after meaningful changes, update structure/routes/decisions and append a session log entry.
-16. Prefer small, focused changes over broad refactors unless requested.
+13. **Validation create is client-first** — `/validation/new` stages file and rules locally; call backend only on **Save Draft** or **Run Validation** via `lib/validation-api.ts`.
+14. **Validation drafts are resumable** — `draft` / `rules_configured` runs open at `/validation/[id]`; use `validationRunHref()` for list links.
+15. **Dual-scope IA** — Activity hubs browse across all owned projects; Current project tools do day-to-day work; create/execute always requires an explicit project (picker or selected).
+15. **Global lists are per signed-in user only** — no cross-user/org sharing until a sharing model exists.
+16. **Keep `Project.md` current** — after meaningful changes, update structure/routes/decisions and append a session log entry.
+17. Prefer small, focused changes over broad refactors unless requested.
 
 ---
 

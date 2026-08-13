@@ -1,7 +1,12 @@
 export const VALIDATION_PROJECT_NAME =
   "Customer Master — Oracle → SAP";
 
-export type ValidationRunStatus = "completed" | "failed" | "running";
+export type ValidationRunStatus =
+  | "draft"
+  | "rules_configured"
+  | "completed"
+  | "failed"
+  | "running";
 
 export type ValidationRun = {
   id: string;

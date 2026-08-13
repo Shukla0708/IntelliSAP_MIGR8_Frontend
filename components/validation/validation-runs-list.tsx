@@ -7,9 +7,15 @@ import { ProjectPickerDialog } from "@/components/projects/project-picker-dialog
 import { AddIcon, RuleIcon } from "@/components/ui/icons";
 import apiClient from "@/lib/axios";
 import { useDefaultProject } from "@/lib/use-default-project";
+import { validationRunHref } from "@/lib/validation-routes";
 import type { ValidationRunStatus } from "@/data/validation";
 
 const statusStyles: Record<ValidationRunStatus, { label: string; className: string }> = {
+  draft: { label: "Draft", className: "bg-surface-container-high text-on-surface-variant" },
+  rules_configured: {
+    label: "Ready",
+    className: "bg-secondary-container/10 text-secondary",
+  },
   completed: { label: "Completed", className: "bg-success/10 text-success" },
   failed: { label: "Failed", className: "bg-error-container text-error" },
   running: { label: "Running", className: "bg-primary-container/10 text-primary" },
@@ -131,11 +137,11 @@ export function ValidationRunsList() {
           )}
 
           {runs.map((run) => {
-            const status = statusStyles[run.status];
+            const status = statusStyles[run.status] ?? statusStyles.draft;
             return (
               <Link
                 key={run.id}
-                href={`/validation_result/${run.id}`}
+                href={validationRunHref(run)}
                 className="flex flex-col gap-3 p-4 transition-colors hover:bg-surface-container-low sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex items-center gap-4">

@@ -1,71 +1,191 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { SourceUploadZone } from "@/components/validation/source-upload-zone";
 import { ValidationRulesTable } from "@/components/validation/validation-rules-table";
 import { PlayArrowIcon } from "@/components/ui/icons";
 import { TextField } from "@/components/ui/text-field";
-import apiClient, { getApiErrorMessage } from "@/lib/axios";
+import { getApiErrorMessage } from "@/lib/axios";
 import { useDefaultProject } from "@/lib/use-default-project";
+import {
+  apiFieldToRule,
+  executeValidationRun,
+  fetchValidationRun,
+  persistValidationRun,
+  updateValidationDraft,
+} from "@/lib/validation-api";
+import { isEditableValidationStatus } from "@/lib/validation-routes";
 import type { ValidationFieldRule } from "@/data/validation";
 
-export function AdvancedValidationView() {
+type AdvancedValidationViewProps = {
+  editRunId?: string;
+};
+
+export function AdvancedValidationView({ editRunId }: AdvancedValidationViewProps) {
   const router = useRouter();
   const { project, loading: projectLoading } = useDefaultProject();
+  const isEditMode = Boolean(editRunId);
 
+  const [loadingDraft, setLoadingDraft] = useState(isEditMode);
   const [runName, setRunName] = useState("");
-  const [runId, setRunId] = useState<string | null>(null);
+  const [runId, setRunId] = useState<string | null>(editRunId ?? null);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
+  const [serverSourceFilename, setServerSourceFilename] = useState<string | null>(null);
+  const [hasServerSource, setHasServerSource] = useState(false);
   const [fields, setFields] = useState<string[]>([]);
+  const [initialRules, setInitialRules] = useState<ValidationFieldRule[]>([]);
   const [rules, setRules] = useState<ValidationFieldRule[]>([]);
+  const [fieldsVersion, setFieldsVersion] = useState(0);
+  const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const handleUploaded = useCallback((id: string, extractedFields: string[]) => {
-    setRunId(id);
+  useEffect(() => {
+    if (!editRunId) return;
+
+    let cancelled = false;
+    setLoadingDraft(true);
+    setError(null);
+
+    fetchValidationRun(editRunId)
+      .then((detail) => {
+        if (cancelled) return;
+
+        if (!isEditableValidationStatus(detail.status)) {
+          router.replace(`/validation_result/${editRunId}`);
+          return;
+        }
+
+        const loadedRules = detail.fields.map(apiFieldToRule);
+        setRunId(detail.id);
+        setProjectId(detail.project_id);
+        setRunName(detail.name);
+        setServerSourceFilename(detail.source_filename);
+        setHasServerSource(detail.has_source_file);
+        setFields(detail.fields.map((field) => field.field_name));
+        setInitialRules(loadedRules);
+        setRules(loadedRules);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(getApiErrorMessage(err, "Could not load validation draft"));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDraft(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editRunId, router]);
+
+  const handleFileSelected = useCallback((file: File, extractedFields: string[]) => {
+    setSourceFile(file);
     setFields(extractedFields);
+    setInitialRules([]);
+    setFieldsVersion((current) => current + 1);
+    setError(null);
+    setSuccessMessage(null);
   }, []);
 
   const handleRulesChange = useCallback((rows: ValidationFieldRule[]) => {
     setRules(rows);
   }, []);
 
-  async function handleRunValidation() {
-    if (!runId) return;
-    setRunning(true);
+  const activeProjectId = isEditMode ? projectId : project?.id ?? null;
+  const sourceReady =
+    fields.length > 0 && (Boolean(sourceFile) || hasServerSource);
+  const nameLocked = Boolean(sourceFile) || hasServerSource || isEditMode;
+  const busy = saving || running || loadingDraft;
+  const canSaveDraft = sourceReady && runName.trim().length > 0 && !busy;
+
+  async function handleSaveDraft() {
+    if (!activeProjectId || !sourceReady) return;
+
+    setSaving(true);
     setError(null);
+    setSuccessMessage(null);
 
     try {
-      await apiClient.put(
-        `/api/runs/${runId}/rules`,
-        rules.map((r) => ({
-          field_name: r.fieldName,
-          flag_key: r.flags.key,
-          flag_mandatory: r.flags.mandatory,
-          flag_null: r.flags.null,
-          flag_email: r.flags.email,
-          flag_mobile: r.flags.mobile,
-          flag_date: r.flags.date,
-          flag_special_chars: r.flags.specialChars,
-          case_format: r.config.caseFormat,
-          data_type: r.config.dataType,
-          max_length: r.config.length,
-          decimal_length: r.config.decimalLength,
-          regex: r.config.regex || null,
-          regex_prompt: r.config.regexPrompt || null,
-        })),
-      );
+      if (runId) {
+        await updateValidationDraft(runId, rules, sourceFile);
+      } else if (sourceFile) {
+        const id = await persistValidationRun(activeProjectId, runName, rules, {
+          file: sourceFile,
+        });
+        setRunId(id);
+      } else {
+        return;
+      }
 
-      await apiClient.post(`/api/runs/${runId}/execute`);
-      router.push(`/validation_result/${runId}`);
+      setHasServerSource(true);
+      if (sourceFile) {
+        setServerSourceFilename(sourceFile.name);
+        setSourceFile(null);
+      }
+      setSuccessMessage("Draft saved. You can continue configuring rules or run validation.");
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Failed to save draft"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRunValidation() {
+    if (!activeProjectId || !sourceReady) return;
+
+    setRunning(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      let id = runId;
+      if (id) {
+        await updateValidationDraft(id, rules, sourceFile);
+      } else if (sourceFile) {
+        id = await persistValidationRun(activeProjectId, runName, rules, {
+          file: sourceFile,
+        });
+        setRunId(id);
+      } else {
+        return;
+      }
+
+      await executeValidationRun(id);
+      router.push(`/validation_result/${id}`);
     } catch (err) {
       setError(getApiErrorMessage(err, "Validation run failed"));
       setRunning(false);
     }
   }
 
-  const sourceReady = fields.length > 0;
-  const nameLocked = Boolean(runId);
+  const introCopy = isEditMode
+    ? "Edit this saved draft, replace the source file if needed, then save or run validation."
+    : "Name this run, configure validation logic, and stage your source file. Nothing is saved until you choose Save Draft or Run Validation.";
+
+  if (isEditMode && loadingDraft) {
+    return (
+      <div className="mx-auto max-w-[1200px] px-4 py-6 md:px-8">
+        <p className="text-sm text-on-surface-variant">Loading draft...</p>
+      </div>
+    );
+  }
+
+  if (isEditMode && error && !runName) {
+    return (
+      <div className="mx-auto max-w-[1200px] px-4 py-6 md:px-8">
+        <p className="text-sm text-error">{error}</p>
+        <Link href="/validation" className="mt-2 inline-block text-sm font-semibold text-primary hover:underline">
+          Back to validations
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)] flex-col">
@@ -75,12 +195,10 @@ export function AdvancedValidationView() {
             <h2 className="mb-2 text-[32px] font-semibold leading-10 tracking-[-0.01em] text-on-surface">
               Data Validation Rules
             </h2>
-            <p className="text-base leading-6 text-on-surface-variant">
-              Name this run, then configure validation logic and upload your source records.
-            </p>
+            <p className="text-base leading-6 text-on-surface-variant">{introCopy}</p>
           </div>
 
-          {projectLoading || !project ? (
+          {!isEditMode && (projectLoading || !project) ? (
             <p className="text-sm text-on-surface-variant">Loading project...</p>
           ) : (
             <>
@@ -99,21 +217,29 @@ export function AdvancedValidationView() {
                 />
                 <p className="mt-1.5 text-xs leading-4 text-on-surface-variant">
                   Must be unique within this project.
-                  {nameLocked ? " Locked after the source file is uploaded." : null}
+                  {nameLocked ? " Locked while a source file is attached." : null}
                 </p>
               </div>
 
               <SourceUploadZone
-                projectId={project.id}
                 runName={runName}
-                onUploaded={handleUploaded}
+                existingFileName={serverSourceFilename}
+                onFileSelected={handleFileSelected}
               />
               <div className="mt-6">
-                <ValidationRulesTable fields={fields} onRulesChange={handleRulesChange} />
+                <ValidationRulesTable
+                  fields={fields}
+                  initialRules={initialRules}
+                  fieldsVersion={fieldsVersion}
+                  onRulesChange={handleRulesChange}
+                />
               </div>
             </>
           )}
 
+          {successMessage && (
+            <p className="mt-4 text-sm text-success">{successMessage}</p>
+          )}
           {error && <p className="mt-4 text-sm text-error">{error}</p>}
         </div>
       </div>
@@ -122,33 +248,40 @@ export function AdvancedValidationView() {
         <div className="text-[13px] leading-[18px] text-on-surface-variant">
           {sourceReady ? (
             <>
-              <span className="font-semibold text-primary">Source File</span> ready for validation
+              <span className="font-semibold text-primary">Source File</span>{" "}
+              {sourceFile ? "staged locally" : "saved on server"}
               {runName.trim() ? (
                 <>
                   {" "}
                   · <span className="font-semibold text-on-surface">{runName.trim()}</span>
                 </>
               ) : null}
+              {runId && !sourceFile ? (
+                <>
+                  {" "}
+                  · <span className="font-semibold text-success">Draft saved</span>
+                </>
+              ) : null}
             </>
           ) : runName.trim() ? (
-            "Upload a source file to begin validation"
+            "Select a source file to begin validation"
           ) : (
-            "Enter a unique run name, then upload a source file"
+            "Enter a unique run name, then select a source file"
           )}
         </div>
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
-            disabled
-            title="Draft saving happens automatically once rules are configured"
-            className="rounded-lg border border-outline-variant bg-white px-6 py-2.5 text-xs font-semibold uppercase tracking-[0.02em] text-on-surface opacity-60 shadow-sm"
+            onClick={handleSaveDraft}
+            disabled={!canSaveDraft}
+            className="rounded-lg border border-outline-variant bg-white px-6 py-2.5 text-xs font-semibold uppercase tracking-[0.02em] text-on-surface shadow-sm transition-colors hover:bg-surface-container-low disabled:opacity-50"
           >
-            Save Draft
+            {saving ? "Saving..." : "Save Draft"}
           </button>
           <button
             type="button"
             onClick={handleRunValidation}
-            disabled={!sourceReady || running}
+            disabled={!sourceReady || busy}
             className="inline-flex items-center gap-2 rounded-lg bg-primary-container px-6 py-2.5 text-xs font-semibold uppercase tracking-[0.02em] text-on-primary shadow-sm transition-colors hover:bg-primary disabled:opacity-50"
           >
             {running ? "Running..." : "Run Validation Rules"}
