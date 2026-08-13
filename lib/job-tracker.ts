@@ -1,6 +1,6 @@
 const STORAGE_KEY = "migr8.trackedJobs";
 
-export type TrackedJobKind = "validation" | "comparison";
+export type TrackedJobKind = "validation" | "comparison" | "mapping";
 
 export type TrackedJob = {
   kind: TrackedJobKind;
@@ -17,7 +17,9 @@ function readJobs(): TrackedJob[] {
     return parsed.filter(
       (job) =>
         job &&
-        (job.kind === "validation" || job.kind === "comparison") &&
+        (job.kind === "validation" ||
+          job.kind === "comparison" ||
+          job.kind === "mapping") &&
         typeof job.id === "string",
     );
   } catch {
@@ -48,11 +50,17 @@ export function listTrackedJobs(): TrackedJob[] {
 }
 
 export function resultPathForJob(job: TrackedJob): string {
-  return job.kind === "validation"
-    ? `/validation_result/${job.id}`
-    : `/compare/${job.id}`;
+  if (job.kind === "validation") return `/validation_result/${job.id}`;
+  if (job.kind === "mapping") return `/field-mapping/${job.id}`;
+  return `/compare/${job.id}`;
 }
 
 export function isJobResultPath(pathname: string, job: TrackedJob): boolean {
   return pathname === resultPathForJob(job) || pathname.startsWith(`${resultPathForJob(job)}/`);
+}
+
+export function statusUrlForJob(job: TrackedJob): string {
+  if (job.kind === "validation") return `/api/runs/${job.id}/result`;
+  if (job.kind === "mapping") return `/api/mappings/${job.id}/result`;
+  return `/api/comparisons/${job.id}/result`;
 }

@@ -1,4 +1,5 @@
 import apiClient from "@/lib/axios";
+import { trackJob } from "@/lib/job-tracker";
 import type {
   FieldMappingRow,
   FieldMappingWorkspace,
@@ -16,6 +17,7 @@ export type MappingProspectApi = {
   datatypeMatchScore: number | null;
   confidence: number | null;
   reasoning: string | null;
+  userSelected?: boolean;
 };
 
 export type MappingRowApi = {
@@ -55,7 +57,9 @@ export async function createMappingRun(
   const { data } = await apiClient.post<MappingRunResult>(
     `/api/mappings/?project_id=${projectId}`,
     formData,
+    { timeout: 0 },
   );
+  trackJob({ kind: "mapping", id: data.mappingRunId });
   return data;
 }
 
@@ -145,7 +149,24 @@ export function toFieldMappingWorkspace(
       datatypeMatch:
         p.datatypeMatchScore != null ? Math.round(p.datatypeMatchScore) : null,
       reasoning: p.reasoning ?? null,
+      manual: Boolean(p.userSelected),
     }));
+
+    if (
+      row.confirmedTargetField &&
+      !prospects.some((p) => p.targetField === row.confirmedTargetField)
+    ) {
+      prospects.push({
+        id: `${row.sourceField}__${row.confirmedTargetField}`,
+        targetField: row.confirmedTargetField,
+        targetDescription: null,
+        confidence: 0,
+        semanticSimilarity: null,
+        datatypeMatch: null,
+        reasoning: "Selected by the user from the full target list.",
+        manual: true,
+      });
+    }
 
     const topApiProspect = row.prospects[0] ?? null;
 
@@ -159,7 +180,7 @@ export function toFieldMappingWorkspace(
       icon: "tag",
       keyField: row.keyField,
       requiresManualMapping,
-      confirmed: confirmedProspect !== null,
+      confirmed: Boolean(row.confirmedTargetField),
       status:
         !requiresManualMapping && prospects.length > 0 ? "mapped" : "unmapped",
       prospects,
