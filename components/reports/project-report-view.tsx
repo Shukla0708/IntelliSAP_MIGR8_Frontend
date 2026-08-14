@@ -188,14 +188,17 @@ export function ProjectReportView() {
         value: String(comparison.totalMismatches),
         tone: "tertiary",
         icon: "difference",
-        hint: "Preview data",
+        hint: `${comparison.completedRuns} completed runs`,
       },
       {
         id: "mapping-approval",
         label: "Mapping Approval",
         value: `${mapping.approvalRate}%`,
         progress: mapping.approvalRate,
-        hint: "Preview data",
+        hint:
+          mapping.totalFields === 0
+            ? "No mapping runs yet"
+            : `${mapping.totalFields - mapping.unmappedFields} of ${mapping.totalFields} fields confirmed`,
       },
     ];
   }, [activeReport]);

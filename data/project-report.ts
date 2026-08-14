@@ -1,7 +1,6 @@
-import { PREVIOUS_COMPARISON_RUNS } from "@/data/comparison";
-import { RECONCILIATION_REVIEWS_BY_ID } from "@/data/comparison-results";
-import { PREVIOUS_FIELD_MAPPING_RUNS } from "@/data/field-mapping";
-import { FIELD_MAPPING_WORKSPACES } from "@/data/field-mapping-workspace";
+import type { ComparisonReview } from "@/lib/comparison-api";
+import type { ComparisonRunListItem } from "@/lib/comparison-api";
+import type { MappingRunListItem } from "@/lib/mapping-api";
 
 export type ReportErrorByType = { label: string; value: number };
 export type ReportErrorByField = { field: string; count: number };
@@ -63,7 +62,6 @@ export type ComparisonReportSection = {
     records: string;
     ranAt: string;
   }[];
-  isPreview: true;
 };
 
 export type MappingReportSection = {
@@ -81,7 +79,6 @@ export type MappingReportSection = {
     fields: string;
     ranAt: string;
   }[];
-  isPreview: true;
 };
 
 export type ProjectReport = ProjectReportApiResponse & {
@@ -90,28 +87,31 @@ export type ProjectReport = ProjectReportApiResponse & {
   readiness: ReportReadiness;
 };
 
-function parseFieldsCount(fields: string): number {
-  const match = fields.match(/(\d+)/);
-  return match ? Number(match[1]) : 0;
-}
-
 function parseMatchRate(rate: string): number {
   const match = rate.match(/([\d.]+)/);
   return match ? Number(match[1]) : 0;
 }
 
-/** Mock comparison aggregates — uses all mock runs when project has no name match */
-export function aggregateComparisonForProject(
-  _projectId: string,
-  _projectName: string,
-): ComparisonReportSection {
-  const runs = PREVIOUS_COMPARISON_RUNS;
-  const reviews = runs
-    .map((run) => RECONCILIATION_REVIEWS_BY_ID[run.id])
-    .filter(Boolean);
+function formatRanAt(iso: string | null | undefined): string {
+  if (!iso) return "Not run yet";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "Not run yet";
+  const diffMs = Date.now() - date.getTime();
+  if (diffMs < 60_000) return "Just now";
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return date.toLocaleDateString();
+}
 
-  const totalMismatches = runs.reduce((sum, r) => sum + r.mismatches, 0);
-  const matchRates = reviews.map((r) => parseMatchRate(r.matchRate));
+export function buildComparisonReport(
+  runs: ComparisonRunListItem[],
+  reviews: ComparisonReview[],
+): ComparisonReportSection {
+  const completed = runs.filter((run) => run.status === "completed");
+  const totalMismatches = runs.reduce((sum, run) => sum + run.mismatches, 0);
+  const matchRates = reviews.map((review) => parseMatchRate(review.matchRate));
   const avgMatchRate =
     matchRates.length > 0
       ? Math.round(matchRates.reduce((a, b) => a + b, 0) / matchRates.length)
@@ -119,47 +119,32 @@ export function aggregateComparisonForProject(
 
   return {
     totalRuns: runs.length,
-    completedRuns: runs.filter((r) => r.status === "completed").length,
+    completedRuns: completed.length,
     totalMismatches,
     avgMatchRate,
-    matchedRecords: reviews.reduce((sum, r) => sum + r.matchedRecords, 0),
-    differentCount: reviews.reduce((sum, r) => sum + r.differentCount, 0),
-    missingCount: reviews.reduce((sum, r) => sum + r.missingCount, 0),
-    recentRuns: runs.map((r) => ({
-      id: r.id,
-      name: r.name,
-      status: r.status,
-      mismatches: r.mismatches,
-      records: r.records,
-      ranAt: r.ranAt,
+    matchedRecords: reviews.reduce((sum, review) => sum + review.matchedRecords, 0),
+    differentCount: reviews.reduce((sum, review) => sum + review.differentCount, 0),
+    missingCount: reviews.reduce((sum, review) => sum + review.missingCount, 0),
+    recentRuns: runs.slice(0, 8).map((run) => ({
+      id: run.id,
+      name: run.name,
+      status: run.status,
+      mismatches: run.mismatches,
+      records: run.records,
+      ranAt: formatRanAt(run.ranAt),
     })),
-    isPreview: true,
   };
 }
 
-/** Mock mapping aggregates */
-export function aggregateMappingForProject(
-  _projectId: string,
-  _projectName: string,
+export function buildMappingReport(
+  runs: MappingRunListItem[],
+  confidences: number[],
 ): MappingReportSection {
-  const runs = PREVIOUS_FIELD_MAPPING_RUNS;
-  const totalFields = runs.reduce((sum, r) => sum + parseFieldsCount(r.fields), 0);
-  const unmappedFields = runs.reduce((sum, r) => sum + r.unmapped, 0);
+  const totalFields = runs.reduce((sum, run) => sum + run.totalSourceFields, 0);
+  const confirmedFields = runs.reduce((sum, run) => sum + run.confirmedFieldCount, 0);
+  const unmappedFields = Math.max(totalFields - confirmedFields, 0);
   const approvalRate =
-    totalFields > 0
-      ? Math.round(((totalFields - unmappedFields) / totalFields) * 100)
-      : 0;
-
-  const confidences: number[] = [];
-  for (const run of runs) {
-    const workspace = FIELD_MAPPING_WORKSPACES[run.id];
-    if (!workspace) continue;
-    for (const row of workspace.rows) {
-      const prospect = row.prospects.find((p) => p.id === row.selectedProspectId);
-      if (prospect) confidences.push(prospect.confidence);
-      else if (row.aiReview) confidences.push(row.aiReview.confidence);
-    }
-  }
+    totalFields > 0 ? Math.round((confirmedFields / totalFields) * 100) : 0;
   const avgConfidence =
     confidences.length > 0
       ? Math.round(confidences.reduce((a, b) => a + b, 0) / confidences.length)
@@ -167,20 +152,19 @@ export function aggregateMappingForProject(
 
   return {
     totalRuns: runs.length,
-    completedRuns: runs.filter((r) => r.status === "completed").length,
+    completedRuns: runs.filter((run) => run.status === "completed").length,
     totalFields,
     unmappedFields,
     approvalRate,
     avgConfidence,
-    recentRuns: runs.map((r) => ({
-      id: r.id,
-      name: r.name,
-      status: r.status,
-      unmapped: r.unmapped,
-      fields: r.fields,
-      ranAt: r.ranAt,
+    recentRuns: runs.slice(0, 8).map((run) => ({
+      id: run.mappingRunId,
+      name: run.mappingName || "Field mapping run",
+      status: run.status,
+      unmapped: Math.max(run.totalSourceFields - run.confirmedFieldCount, 0),
+      fields: `${run.totalSourceFields} fields`,
+      ranAt: formatRanAt(run.createdAt),
     })),
-    isPreview: true,
   };
 }
 

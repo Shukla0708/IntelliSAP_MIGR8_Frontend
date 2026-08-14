@@ -58,7 +58,6 @@ export function ComparisonReportSectionView({
       icon={CompareIcon}
       toolHref="/compare"
       toolLabel="Open Comparison"
-      preview={comparison.isPreview}
     >
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <SummaryCard
@@ -88,7 +87,12 @@ export function ComparisonReportSectionView({
           Recent runs
         </p>
         <div className="divide-y divide-outline-variant rounded-lg border border-outline-variant">
-          {comparison.recentRuns.map((run) => (
+          {comparison.recentRuns.length === 0 ? (
+            <p className="px-3 py-4 text-sm text-on-surface-variant">
+              No comparison runs yet for this project.
+            </p>
+          ) : (
+            comparison.recentRuns.map((run) => (
             <Link
               key={run.id}
               href={`/compare/${run.id}`}
@@ -99,7 +103,8 @@ export function ComparisonReportSectionView({
                 {run.mismatches} mismatches
               </span>
             </Link>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </ReportPillarSection>

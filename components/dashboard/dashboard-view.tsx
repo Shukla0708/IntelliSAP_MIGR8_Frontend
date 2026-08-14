@@ -190,21 +190,30 @@ export function DashboardView() {
 
   const recentProjects: RecentProject[] = useMemo(() => {
     const runCounts = new Map<string, number>();
+    const recordTotals = new Map<string, number>();
     for (const run of runs) {
       runCounts.set(
         run.project_id,
-        (runCounts.get(run.project_id) ?? 0) + parseRecordCount(run.records),
+        (runCounts.get(run.project_id) ?? 0) + 1,
+      );
+      recordTotals.set(
+        run.project_id,
+        (recordTotals.get(run.project_id) ?? 0) + parseRecordCount(run.records),
       );
     }
-    return projects.slice(0, 5).map((project, index) => {
-      const records = runCounts.get(project.id) ?? 0;
+    return projects.slice(0, 5).map((project) => {
+      const runCount = runCounts.get(project.id) ?? 0;
+      const records = recordTotals.get(project.id) ?? 0;
       return {
         id: project.id,
         name: project.name,
-        records: records > 0 ? `${formatCompact(records)} Records` : "0 Records",
+        records:
+          runCount > 0
+            ? `${runCount} run${runCount === 1 ? "" : "s"} · ${formatCompact(records)} records`
+            : "No runs yet",
         updated: project.updated,
-        icon: (index === 0 ? "sync" : index === 1 ? "inventory" : "draft") as RecentProject["icon"],
-        accent: (index === 0 ? "primary" : index === 1 ? "neutral" : "muted") as RecentProject["accent"],
+        icon: (runCount > 0 ? "sync" : "draft") as RecentProject["icon"],
+        accent: (runCount > 0 ? "primary" : "muted") as RecentProject["accent"],
       };
     });
   }, [projects, runs]);

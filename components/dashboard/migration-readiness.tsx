@@ -1,15 +1,21 @@
 import { CircularProgress, ProgressBar } from "@/components/ui/progress";
 import { SectionCard } from "@/components/dashboard/kpi-card";
-import { READINESS } from "@/data/dashboard";
+import type { ReadinessBreakdownItem } from "@/data/dashboard";
+
+const EMPTY_BREAKDOWN: ReadinessBreakdownItem[] = [
+  { label: "Validation", value: 0, barClassName: "bg-primary" },
+  { label: "Comparison", value: 0, barClassName: "bg-primary" },
+  { label: "Mapping", value: 0, barClassName: "bg-secondary-container" },
+];
 
 type MigrationReadinessProps = {
   score?: number;
-  breakdown?: typeof READINESS.breakdown;
+  breakdown?: ReadinessBreakdownItem[];
 };
 
 export function MigrationReadiness({
-  score = READINESS.score,
-  breakdown = READINESS.breakdown,
+  score = 0,
+  breakdown = EMPTY_BREAKDOWN,
 }: MigrationReadinessProps) {
   return (
     <SectionCard className="flex flex-col items-center p-6 text-center">

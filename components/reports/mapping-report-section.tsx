@@ -28,7 +28,6 @@ export function MappingReportSectionView({ mapping }: MappingReportSectionProps)
       icon={HubIcon}
       toolHref="/field-mapping"
       toolLabel="Open Field Mapping"
-      preview={mapping.isPreview}
     >
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <MiniStat label="Total Fields" value={String(mapping.totalFields)} />
@@ -50,7 +49,12 @@ export function MappingReportSectionView({ mapping }: MappingReportSectionProps)
           Recent runs
         </p>
         <div className="divide-y divide-outline-variant rounded-lg border border-outline-variant">
-          {mapping.recentRuns.map((run) => (
+          {mapping.recentRuns.length === 0 ? (
+            <p className="px-3 py-4 text-sm text-on-surface-variant">
+              No field mapping runs yet for this project.
+            </p>
+          ) : (
+            mapping.recentRuns.map((run) => (
             <Link
               key={run.id}
               href={`/field-mapping/${run.id}`}
@@ -61,7 +65,8 @@ export function MappingReportSectionView({ mapping }: MappingReportSectionProps)
                 {run.unmapped} unmapped
               </span>
             </Link>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </ReportPillarSection>
