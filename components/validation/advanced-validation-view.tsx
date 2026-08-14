@@ -13,9 +13,12 @@ import {
   apiFieldToRule,
   executeValidationRun,
   fetchValidationRun,
+  mergeSuggestedRules,
   persistValidationRun,
+  suggestValidationRules,
   updateValidationDraft,
 } from "@/lib/validation-api";
+import { parseSourceColumnSamples } from "@/lib/parse-source-headers";
 import { isEditableValidationStatus } from "@/lib/validation-routes";
 import type { ValidationFieldRule } from "@/data/validation";
 
@@ -43,6 +46,8 @@ export function AdvancedValidationView({ editRunId }: AdvancedValidationViewProp
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  const [aiWarning, setAiWarning] = useState<string | null>(null);
 
   useEffect(() => {
     if (!editRunId) return;
@@ -91,6 +96,7 @@ export function AdvancedValidationView({ editRunId }: AdvancedValidationViewProp
     setFieldsVersion((current) => current + 1);
     setError(null);
     setSuccessMessage(null);
+    setAiWarning(null);
   }, []);
 
   const handleRulesChange = useCallback((rows: ValidationFieldRule[]) => {
@@ -101,8 +107,51 @@ export function AdvancedValidationView({ editRunId }: AdvancedValidationViewProp
   const sourceReady =
     fields.length > 0 && (Boolean(sourceFile) || hasServerSource);
   const nameLocked = Boolean(sourceFile) || hasServerSource || isEditMode;
-  const busy = saving || running || loadingDraft;
+  const busy = saving || running || loadingDraft || suggesting;
   const canSaveDraft = sourceReady && runName.trim().length > 0 && !busy;
+  const canApplyAi = fields.length > 0 && !busy;
+
+  async function handleApplyAi() {
+    if (!canApplyAi) return;
+
+    setSuggesting(true);
+    setError(null);
+    setAiWarning(null);
+    setSuccessMessage(null);
+
+    try {
+      let samplesByField: Record<string, string[]> = {};
+      if (sourceFile) {
+        try {
+          samplesByField = await parseSourceColumnSamples(sourceFile);
+        } catch {
+          samplesByField = {};
+        }
+      }
+      const payload = fields.map((field_name) => ({
+        field_name,
+        samples: samplesByField[field_name] ?? [],
+      }));
+      const result = await suggestValidationRules(payload);
+      const merged = mergeSuggestedRules(rules, result.suggestions);
+      setRules(merged);
+      setInitialRules(merged);
+      setFieldsVersion((current) => current + 1);
+      if (result.warning) {
+        setAiWarning(result.warning);
+      }
+      if (result.suggestions.length === 0) {
+        setAiWarning(
+          result.warning ||
+            "No additional rules suggested for these columns. You can still configure them manually.",
+        );
+      }
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Could not apply AI rule suggestions"));
+    } finally {
+      setSuggesting(false);
+    }
+  }
 
   async function handleSaveDraft() {
     if (!activeProjectId || !sourceReady) return;
@@ -232,6 +281,10 @@ export function AdvancedValidationView({ editRunId }: AdvancedValidationViewProp
                   initialRules={initialRules}
                   fieldsVersion={fieldsVersion}
                   onRulesChange={handleRulesChange}
+                  onApplyAi={handleApplyAi}
+                  suggesting={suggesting}
+                  aiWarning={aiWarning}
+                  canApplyAi={canApplyAi}
                 />
               </div>
             </>

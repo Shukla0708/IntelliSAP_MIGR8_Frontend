@@ -76,12 +76,15 @@ export type FieldRuleConfig = {
   regexPrompt: string; // plain-English rule; Groq generates regex
 };
 
+export type RuleSource = "user" | "ai" | "default";
+
 export type ValidationFieldRule = {
   id: string;
   fieldName: string;
   tags: string[];
   config: FieldRuleConfig;
   flags: Record<RuleFlag, boolean>;
+  ruleSource?: RuleSource;
 };
 
 export function isLengthEnabled(dataType: FieldDataType) {

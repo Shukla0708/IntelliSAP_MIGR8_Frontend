@@ -6,6 +6,7 @@ import {
   type ValidationFieldRule,
 } from "@/data/validation";
 import apiClient from "@/lib/axios";
+import { sapCharLength, sapFieldKey } from "@/lib/sap-field-types";
 import { trackJob } from "@/lib/job-tracker";
 
 export type ValidationRunDetail = {
@@ -34,6 +35,7 @@ export type ValidationRunDetail = {
     decimal_length: number | null;
     regex: string | null;
     regex_prompt: string | null;
+    rule_source?: "user" | "ai" | "default";
   }>;
 };
 
@@ -53,6 +55,7 @@ export function rulesToPayload(rules: ValidationFieldRule[]) {
     decimal_length: rule.config.decimalLength,
     regex: rule.config.regex || null,
     regex_prompt: rule.config.regexPrompt || null,
+    rule_source: rule.ruleSource ?? "default",
   }));
 }
 
@@ -83,6 +86,7 @@ export function apiFieldToRule(
       date: field.flag_date,
       specialChars: field.flag_special_chars,
     },
+    ruleSource: field.rule_source ?? "default",
   };
 }
 
@@ -167,4 +171,90 @@ export async function persistValidationRun(
 
   await saveValidationRules(runId, rules);
   return runId;
+}
+
+export type SuggestedField = {
+  field_name: string;
+  flag_key: boolean;
+  flag_mandatory: boolean;
+  flag_null: boolean;
+  flag_email: boolean;
+  flag_mobile: boolean;
+  flag_date: boolean;
+  flag_special_chars: boolean;
+  case_format: CaseFormat | null;
+  data_type: FieldDataType;
+  max_length: number | null;
+  decimal_length: number | null;
+  regex: string | null;
+  regex_prompt: string | null;
+  rule_source?: string;
+  suggestion_source?: string;
+  template_name?: string | null;
+};
+
+export type SuggestRulesResponse = {
+  suggestions: SuggestedField[];
+  warning: string | null;
+};
+
+export function mergeSuggestedRules(
+  current: ValidationFieldRule[],
+  suggestions: SuggestedField[],
+): ValidationFieldRule[] {
+  const byName = new Map(suggestions.map((item) => [item.field_name, item]));
+  const byKey = new Map(suggestions.map((item) => [sapFieldKey(item.field_name), item]));
+  return current.map((row) => {
+    if (row.ruleSource === "user") {
+      return row;
+    }
+    const suggestion =
+      byName.get(row.fieldName) ?? byKey.get(sapFieldKey(row.fieldName));
+    if (!suggestion) {
+      return row;
+    }
+    const sapLength = sapCharLength(row.fieldName);
+    let dataType: FieldDataType = suggestion.data_type || "string";
+    let length = suggestion.max_length;
+    if (sapLength != null) {
+      dataType = "char";
+      length = sapLength;
+    } else if (dataType === "int") {
+      dataType = "char";
+    }
+    const config = {
+      caseFormat: suggestion.case_format ?? null,
+      dataType,
+      length,
+      decimalLength: dataType === "decimal" ? suggestion.decimal_length : null,
+      regex: suggestion.regex ?? "",
+      regexPrompt: suggestion.regex_prompt ?? "",
+    };
+    return {
+      ...row,
+      config,
+      tags: buildRuleTags(config),
+      flags: {
+        key: row.flags.key,
+        mandatory: suggestion.flag_mandatory,
+        null: suggestion.flag_null,
+        email: suggestion.flag_email,
+        mobile: suggestion.flag_mobile,
+        date: suggestion.flag_date,
+        specialChars: suggestion.flag_special_chars,
+      },
+      ruleSource: "ai" as const,
+    };
+  });
+}
+
+export async function suggestValidationRules(
+  fields: Array<{ field_name: string; samples: string[] }>,
+): Promise<SuggestRulesResponse> {
+  const { data } = await apiClient.post<SuggestRulesResponse>(
+    "/api/runs/suggest-rules",
+    { fields },
+    { timeout: 90_000 },
+  );
+  return data;
 }
