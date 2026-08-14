@@ -1,7 +1,5 @@
 import Link from "next/link";
 import { ProgressBar } from "@/components/ui/progress";
-import { RuleIcon } from "@/components/ui/icons";
-import { ReportPillarSection } from "@/components/reports/report-pillar-section";
 import type { ReportValidationSection } from "@/data/project-report";
 
 type ValidationReportSectionProps = {
@@ -19,17 +17,12 @@ function MiniStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function ValidationReportSection({ validation }: ValidationReportSectionProps) {
+export function ValidationReportContent({ validation }: ValidationReportSectionProps) {
   const topErrors = validation.errorsByType.slice(0, 3);
   const maxError = topErrors[0]?.value ?? 1;
 
   return (
-    <ReportPillarSection
-      title="Validation"
-      icon={RuleIcon}
-      toolHref="/validation"
-      toolLabel="Open Validation"
-    >
+    <>
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <MiniStat
           label="Completed / Total"
@@ -85,6 +78,6 @@ export function ValidationReportSection({ validation }: ValidationReportSectionP
           </div>
         )}
       </div>
-    </ReportPillarSection>
+    </>
   );
 }

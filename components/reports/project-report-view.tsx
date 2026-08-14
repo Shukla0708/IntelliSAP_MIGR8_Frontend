@@ -2,22 +2,24 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { KpiGrid, SectionCard } from "@/components/dashboard/kpi-card";
 import { MigrationReadiness } from "@/components/dashboard/migration-readiness";
-import { ComparisonReportSectionView } from "@/components/reports/comparison-report-section";
-import { MappingReportSectionView } from "@/components/reports/mapping-report-section";
-import { ValidationReportSection } from "@/components/reports/validation-report-section";
+import {
+  buildReportAttentionIssues,
+  NeedsAttentionPanel,
+} from "@/components/dashboard/needs-attention-panel";
+import { CollapsiblePillar } from "@/components/reports/collapsible-pillar";
+import { ComparisonReportContent } from "@/components/reports/comparison-report-section";
+import { MappingReportContent } from "@/components/reports/mapping-report-section";
+import { ValidationReportContent } from "@/components/reports/validation-report-section";
+import { CompareIcon, HubIcon, RuleIcon } from "@/components/ui/icons";
 import type { KpiMetric } from "@/data/dashboard";
 import type { ProjectReport } from "@/data/project-report";
 import { getApiErrorMessage } from "@/lib/axios";
+import { formatCompact } from "@/lib/format-metrics";
 import { fetchProjectReport } from "@/lib/project-report-api";
 import { useDefaultProject } from "@/lib/use-default-project";
-
-function formatCompact(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
-  return String(n);
-}
 
 function formatUpdatedAt(iso: string | undefined): string {
   if (!iso) return "Updated just now";
@@ -31,77 +33,43 @@ function formatUpdatedAt(iso: string | undefined): string {
   return `Updated ${date.toLocaleDateString()}`;
 }
 
-type NeedsAttentionProps = {
-  failedRuns: number;
-  criticalErrors: number;
-  unmappedFields: number;
-};
+type ProjectStatus = "healthy" | "attention" | "getting-started";
 
-function NeedsAttentionCard({
-  failedRuns,
-  criticalErrors,
-  unmappedFields,
-}: NeedsAttentionProps) {
-  const items: string[] = [];
-  if (failedRuns > 0) {
-    items.push(
-      `${failedRuns} failed validation run${failedRuns === 1 ? "" : "s"}`,
-    );
+function projectStatus(report: ProjectReport): ProjectStatus {
+  const issues = buildReportAttentionIssues({
+    failedRuns: report.validation.failedRuns,
+    criticalErrors: report.validation.criticalErrors,
+    comparisonMismatches: report.comparison.totalMismatches,
+    unmappedFields: report.mapping.unmappedFields,
+  });
+  if (issues.length > 0) return "attention";
+  if (
+    report.validation.totalRuns === 0 &&
+    report.comparison.totalRuns === 0 &&
+    report.mapping.totalRuns === 0
+  ) {
+    return "getting-started";
   }
-  if (criticalErrors > 0) {
-    items.push(
-      `${criticalErrors} critical error${criticalErrors === 1 ? "" : "s"}`,
-    );
-  }
-  if (unmappedFields > 0) {
-    items.push(
-      `${unmappedFields} unmapped field${unmappedFields === 1 ? "" : "s"}`,
-    );
-  }
+  return "healthy";
+}
 
-  if (items.length === 0) {
-    return (
-      <SectionCard className="flex h-full flex-col p-6">
-        <h3 className="text-xl font-semibold leading-7 text-on-surface">
-          Needs Attention
-        </h3>
-        <p className="mt-4 flex-1 text-sm text-on-surface-variant">
-          No critical issues detected for this project.
-        </p>
-      </SectionCard>
-    );
-  }
-
+function StatusBadge({ status }: { status: ProjectStatus }) {
+  const styles: Record<ProjectStatus, string> = {
+    healthy: "bg-primary-container/15 text-primary",
+    attention: "bg-error-container/20 text-error",
+    "getting-started": "bg-surface-container-high text-on-surface-variant",
+  };
+  const labels: Record<ProjectStatus, string> = {
+    healthy: "Healthy",
+    attention: "Needs attention",
+    "getting-started": "Getting started",
+  };
   return (
-    <SectionCard className="flex h-full flex-col p-6">
-      <h3 className="text-xl font-semibold leading-7 text-error">Needs Attention</h3>
-      <ul className="mt-4 flex-1 space-y-2 text-sm text-on-surface-variant">
-        {items.map((item) => (
-          <li key={item} className="flex items-start gap-2">
-            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-error" />
-            {item}
-          </li>
-        ))}
-      </ul>
-      <div className="mt-4 flex flex-wrap gap-2">
-        {failedRuns > 0 ? (
-          <Link
-            href="/validation"
-            className="text-xs font-semibold uppercase tracking-wide text-primary hover:underline"
-          >
-            Review validations
-          </Link>
-        ) : null}
-        {unmappedFields > 0 ? (
-          <Link
-            href="/field-mapping"
-            className="text-xs font-semibold uppercase tracking-wide text-primary hover:underline"
-          >
-            Review mapping
-          </Link>
-        ) : null}
-      </div>
-    </SectionCard>
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${styles[status]}`}
+    >
+      {labels[status]}
+    </span>
   );
 }
 
@@ -142,9 +110,7 @@ export function ProjectReportView() {
     projectId && report?.project.id === projectId ? report : null;
 
   const reportLoading =
-    Boolean(projectId && project?.name) &&
-    !activeReport &&
-    !error;
+    Boolean(projectId && project?.name) && !activeReport && !error;
 
   const displayError =
     error && (!projectId || !report || report.project.id === projectId)
@@ -178,14 +144,14 @@ export function ProjectReportView() {
       {
         id: "validation-errors",
         label: "Validation Errors",
-        value: String(validation.totalErrors),
+        value: formatCompact(validation.totalErrors),
         tone: "error",
         icon: "warning",
       },
       {
         id: "comparison-mismatches",
         label: "Comparison Mismatches",
-        value: String(comparison.totalMismatches),
+        value: formatCompact(comparison.totalMismatches),
         tone: "tertiary",
         icon: "difference",
         hint: `${comparison.completedRuns} completed runs`,
@@ -198,7 +164,7 @@ export function ProjectReportView() {
         hint:
           mapping.totalFields === 0
             ? "No mapping runs yet"
-            : `${mapping.totalFields - mapping.unmappedFields} of ${mapping.totalFields} fields confirmed`,
+            : `${mapping.totalFields - mapping.unmappedFields} of ${mapping.totalFields} confirmed`,
       },
     ];
   }, [activeReport]);
@@ -224,18 +190,33 @@ export function ProjectReportView() {
     ];
   }, [activeReport]);
 
+  const attentionIssues = useMemo(() => {
+    if (!activeReport) return [];
+    return buildReportAttentionIssues({
+      failedRuns: activeReport.validation.failedRuns,
+      criticalErrors: activeReport.validation.criticalErrors,
+      comparisonMismatches: activeReport.comparison.totalMismatches,
+      unmappedFields: activeReport.mapping.unmappedFields,
+    });
+  }, [activeReport]);
+
   const showEmptyCtas =
     activeReport &&
     activeReport.validation.totalRuns === 0 &&
     !reportLoading &&
     !projectLoading;
 
+  const status = activeReport ? projectStatus(activeReport) : null;
+
   return (
     <div className="mx-auto w-full max-w-[1200px]">
       <div className="mb-8">
-        <h2 className="mb-2 text-[32px] font-semibold leading-10 tracking-[-0.01em] text-on-surface">
-          Project Migration Report
-        </h2>
+        <div className="mb-2 flex flex-wrap items-center gap-3">
+          <h2 className="text-[32px] font-semibold leading-10 tracking-[-0.01em] text-on-surface">
+            Project Migration Report
+          </h2>
+          {status ? <StatusBadge status={status} /> : null}
+        </div>
         <p className="max-w-2xl text-base leading-6 text-on-surface-variant">
           {project ? (
             <>
@@ -260,9 +241,7 @@ export function ProjectReportView() {
         </SectionCard>
       ) : null}
 
-      {(projectLoading || reportLoading) ? (
-        <p className="text-sm text-on-surface-variant">Loading report…</p>
-      ) : null}
+      {projectLoading || reportLoading ? <DashboardSkeleton showPillars /> : null}
 
       {displayError && projectId ? (
         <SectionCard className="mb-6 p-6">
@@ -271,60 +250,84 @@ export function ProjectReportView() {
       ) : null}
 
       {activeReport ? (
-        <>
-          <div className="mb-8 grid grid-cols-1 gap-gutter lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-gutter lg:grid-cols-4">
+          <div className="space-y-gutter lg:col-span-3">
+            <KpiGrid metrics={metrics} />
+
+            {showEmptyCtas ? (
+              <SectionCard className="p-6 shadow-ambient">
+                <h3 className="text-lg font-semibold text-on-surface">
+                  Get started with this project
+                </h3>
+                <p className="mt-2 text-sm text-on-surface-variant">
+                  No validation runs yet. Start with any migration tool below.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Link
+                    href="/validation/new"
+                    className="inline-flex h-11 items-center justify-center rounded bg-primary-container px-4 text-base font-semibold text-on-primary shadow-sm transition-colors hover:bg-primary"
+                  >
+                    Start Validation
+                  </Link>
+                  <Link
+                    href="/compare/new"
+                    className="inline-flex h-11 items-center justify-center rounded border border-outline-variant px-4 text-base font-semibold text-primary transition-colors hover:bg-surface-container-high"
+                  >
+                    Start Comparison
+                  </Link>
+                  <Link
+                    href="/field-mapping/new"
+                    className="inline-flex h-11 items-center justify-center rounded border border-outline-variant px-4 text-base font-semibold text-primary transition-colors hover:bg-surface-container-high"
+                  >
+                    Start Mapping
+                  </Link>
+                </div>
+              </SectionCard>
+            ) : null}
+
+            <div className="space-y-gutter">
+              <CollapsiblePillar
+                title="Validation"
+                icon={RuleIcon}
+                toolHref="/validation"
+                toolLabel="Open Validation"
+                summary={`${activeReport.validation.passRate}% pass`}
+                defaultOpen
+              >
+                <ValidationReportContent validation={activeReport.validation} />
+              </CollapsiblePillar>
+
+              <CollapsiblePillar
+                title="Comparison"
+                icon={CompareIcon}
+                toolHref="/compare"
+                toolLabel="Open Comparison"
+                summary={`${formatCompact(activeReport.comparison.totalMismatches)} mismatches`}
+              >
+                <ComparisonReportContent comparison={activeReport.comparison} />
+              </CollapsiblePillar>
+
+              <CollapsiblePillar
+                title="Field Mapping"
+                icon={HubIcon}
+                toolHref="/field-mapping"
+                toolLabel="Open Field Mapping"
+                summary={`${activeReport.mapping.approvalRate}% mapped`}
+              >
+                <MappingReportContent mapping={activeReport.mapping} />
+              </CollapsiblePillar>
+            </div>
+          </div>
+
+          <div className="space-y-gutter lg:col-span-1">
             <MigrationReadiness
+              compact
               score={Math.round(activeReport.readiness.score)}
               breakdown={readinessBreakdown}
             />
-            <NeedsAttentionCard
-              failedRuns={activeReport.validation.failedRuns}
-              criticalErrors={activeReport.validation.criticalErrors}
-              unmappedFields={activeReport.mapping.unmappedFields}
-            />
+            <NeedsAttentionPanel issues={attentionIssues} />
           </div>
-
-          <div className="mb-8">
-            <KpiGrid metrics={metrics} />
-          </div>
-
-          {showEmptyCtas ? (
-            <SectionCard className="mb-8 p-6">
-              <h3 className="text-lg font-semibold text-on-surface">
-                Get started with this project
-              </h3>
-              <p className="mt-2 text-sm text-on-surface-variant">
-                No validation runs yet. Start with any migration tool below.
-              </p>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <Link
-                  href="/validation/new"
-                  className="inline-flex h-11 items-center justify-center rounded bg-primary-container px-4 text-base font-semibold text-on-primary shadow-sm transition-colors hover:bg-primary"
-                >
-                  Start Validation
-                </Link>
-                <Link
-                  href="/compare/new"
-                  className="inline-flex h-11 items-center justify-center rounded border border-outline-variant px-4 text-base font-semibold text-primary transition-colors hover:bg-surface-container-high"
-                >
-                  Start Comparison
-                </Link>
-                <Link
-                  href="/field-mapping/new"
-                  className="inline-flex h-11 items-center justify-center rounded border border-outline-variant px-4 text-base font-semibold text-primary transition-colors hover:bg-surface-container-high"
-                >
-                  Start Mapping
-                </Link>
-              </div>
-            </SectionCard>
-          ) : null}
-
-          <div className="space-y-gutter">
-            <ValidationReportSection validation={activeReport.validation} />
-            <ComparisonReportSectionView comparison={activeReport.comparison} />
-            <MappingReportSectionView mapping={activeReport.mapping} />
-          </div>
-        </>
+        </div>
       ) : null}
     </div>
   );

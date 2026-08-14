@@ -4,8 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { ActivityValidationRun } from "@/components/activity/activity-validations-list";
+import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { KpiGrid, SectionCard } from "@/components/dashboard/kpi-card";
 import { MigrationReadiness } from "@/components/dashboard/migration-readiness";
+import {
+  buildDashboardAttentionIssues,
+  NeedsAttentionPanel,
+} from "@/components/dashboard/needs-attention-panel";
 import { RecentProjects } from "@/components/dashboard/recent-projects";
 import {
   CompareIcon,
@@ -13,14 +18,20 @@ import {
   RuleIcon,
 } from "@/components/ui/icons";
 import { useProject } from "@/contexts/project-context";
+import { toFieldMappingRunStatus } from "@/data/field-mapping";
+import type { KpiMetric, RecentProject } from "@/data/dashboard";
 import apiClient from "@/lib/axios";
 import {
   fetchComparisonRuns,
   type ComparisonRunListItem,
 } from "@/lib/comparison-api";
-import { toFieldMappingRunStatus } from "@/data/field-mapping";
-import { fetchMappingRuns, fetchMappingStats, type MappingRunListItem, type MappingStats } from "@/lib/mapping-api";
-import type { KpiMetric, RecentProject } from "@/data/dashboard";
+import { formatCompact } from "@/lib/format-metrics";
+import {
+  fetchMappingRuns,
+  fetchMappingStats,
+  type MappingRunListItem,
+  type MappingStats,
+} from "@/lib/mapping-api";
 
 type ActivityFeedItem = {
   id: string;
@@ -30,12 +41,6 @@ type ActivityFeedItem = {
   href: string;
   meta: string;
 };
-
-function formatCompact(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
-  return String(n);
-}
 
 function parseRecordCount(records: string): number {
   const match = records.match(/([\d.]+)\s*([kKmM])?/);
@@ -58,6 +63,32 @@ export function DashboardHeader() {
         Monitor data quality, reconciliation and field mapping across all of
         your SAP migrations.
       </p>
+    </div>
+  );
+}
+
+function QuickActions() {
+  const actions = [
+    { label: "Start Validation", href: "/validation/new", primary: true },
+    { label: "Start Comparison", href: "/compare/new", primary: false },
+    { label: "Start Mapping", href: "/field-mapping/new", primary: false },
+  ];
+
+  return (
+    <div className="flex flex-wrap gap-3">
+      {actions.map((action) => (
+        <Link
+          key={action.href}
+          href={action.href}
+          className={
+            action.primary
+              ? "inline-flex h-10 items-center justify-center rounded bg-primary-container px-4 text-sm font-semibold text-on-primary shadow-sm transition-colors hover:bg-primary"
+              : "inline-flex h-10 items-center justify-center rounded border border-outline-variant px-4 text-sm font-semibold text-primary transition-colors hover:bg-surface-container-high"
+          }
+        >
+          {action.label}
+        </Link>
+      ))}
     </div>
   );
 }
@@ -161,14 +192,14 @@ export function DashboardView() {
       {
         id: "validation-errors",
         label: "Validation Errors",
-        value: String(totalErrors),
+        value: formatCompact(totalErrors),
         tone: "error",
         icon: "warning",
       },
       {
         id: "comparison-mismatches",
         label: "Comparison Mismatches",
-        value: String(comparisonMismatches),
+        value: formatCompact(comparisonMismatches),
         tone: "tertiary",
         icon: "difference",
         hint: "From comparison runs",
@@ -239,7 +270,7 @@ export function DashboardView() {
 
     const mappingItems: ActivityFeedItem[] = mappings.slice(0, 2).map((run) => {
       const status = toFieldMappingRunStatus(run.status);
-      const unmapped = Math.max(run.totalSourceFields - run.mappedFields, 0);
+      const unmapped = Math.max(run.totalSourceFields - run.confirmedFieldCount, 0);
       return {
         id: `map-${run.mappingRunId}`,
         type: "mapping" as const,
@@ -296,105 +327,129 @@ export function DashboardView() {
     };
   }, [comparisons, mappingStats, runs]);
 
+  const unmappedFields = useMemo(
+    () =>
+      mappings.reduce(
+        (sum, run) => sum + Math.max(run.totalSourceFields - run.confirmedFieldCount, 0),
+        0,
+      ),
+    [mappings],
+  );
+
+  const totalErrors = useMemo(
+    () => runs.reduce((sum, run) => sum + (run.errors || 0), 0),
+    [runs],
+  );
+
+  const comparisonMismatches = useMemo(
+    () => comparisons.reduce((sum, run) => sum + run.mismatches, 0),
+    [comparisons],
+  );
+
+  const attentionIssues = useMemo(
+    () =>
+      buildDashboardAttentionIssues({
+        failedRuns: readiness.failed,
+        totalErrors,
+        comparisonMismatches,
+        awaitingApproval: mappingStats?.awaitingApproval ?? 0,
+        unmappedFields,
+      }),
+    [
+      comparisonMismatches,
+      mappingStats?.awaitingApproval,
+      readiness.failed,
+      totalErrors,
+      unmappedFields,
+    ],
+  );
+
   const loading = projectsLoading || runsLoading;
 
   return (
-    <>
+    <div className="mx-auto w-full max-w-[1200px]">
       <DashboardHeader />
 
-      <div className="mb-8 grid grid-cols-1 gap-gutter lg:grid-cols-4">
-        <div className="space-y-gutter lg:col-span-3">
-          {loading ? (
-            <p className="text-sm text-on-surface-variant">Loading dashboard…</p>
-          ) : (
+      {loading ? (
+        <DashboardSkeleton showSections />
+      ) : (
+        <div className="grid grid-cols-1 gap-gutter lg:grid-cols-4">
+          <div className="space-y-gutter lg:col-span-3">
             <KpiGrid metrics={metrics} />
-          )}
-          <RecentProjects
-            projects={recentProjects}
-            onSelectProject={(projectId) => {
-              selectProject(projectId);
-              router.push("/validation");
-            }}
-          />
+            {/* <QuickActions /> */}
 
-          <SectionCard className="overflow-hidden">
-            <div className="flex items-center justify-between border-b border-outline-variant bg-surface-container-lowest p-4">
-              <h3 className="text-xl font-semibold leading-7 text-on-surface">
-                Recent Activity
-              </h3>
-              <Link
-                href="/activity/validations"
-                className="text-xs font-semibold uppercase tracking-[0.02em] text-primary hover:underline"
-              >
-                View all
-              </Link>
-            </div>
-            <div className="divide-y divide-outline-variant">
-              {activityFeed.length === 0 ? (
-                <p className="p-4 text-sm text-on-surface-variant">
-                  No recent activity yet.
-                </p>
-              ) : (
-                activityFeed.map((item) => {
-                  const Icon =
-                    item.type === "validation"
-                      ? RuleIcon
-                      : item.type === "comparison"
-                        ? CompareIcon
-                        : HubIcon;
-                  return (
-                    <Link
-                      key={item.id}
-                      href={item.href}
-                      className="flex items-center gap-4 p-4 transition-colors hover:bg-surface-container-low"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-primary-container/10 text-primary">
-                        <Icon className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-base font-semibold text-on-surface">
-                          {item.name}
-                        </p>
-                        <p className="mt-1 truncate text-xs text-on-surface-variant">
-                          <span className="font-bold uppercase tracking-wide">
-                            {item.projectName}
-                          </span>
-                          {" · "}
-                          {item.meta}
-                        </p>
-                      </div>
-                    </Link>
-                  );
-                })
-              )}
-            </div>
-          </SectionCard>
-        </div>
+            <RecentProjects
+              projects={recentProjects}
+              onSelectProject={(projectId) => {
+                selectProject(projectId);
+                router.push("/validation");
+              }}
+            />
 
-        <div className="space-y-gutter">
-          <MigrationReadiness
-            score={readiness.score}
-            breakdown={readiness.breakdown}
-          />
-          {readiness.failed > 0 ? (
-            <SectionCard className="p-4">
-              <h3 className="text-sm font-bold uppercase tracking-wide text-error">
-                Needs attention
-              </h3>
-              <p className="mt-2 text-sm text-on-surface-variant">
-                {readiness.failed} validation run
-                {readiness.failed === 1 ? "" : "s"} failed across your projects.
-              </p>
-              <Link
-                href="/activity/validations"
-                className="mt-3 inline-block text-sm font-semibold text-primary hover:underline"
-              >
-                Review validations
-              </Link>
+            <SectionCard className="overflow-hidden shadow-ambient">
+              <div className="flex items-center justify-between border-b border-outline-variant bg-surface-container-lowest p-4">
+                <h3 className="text-xl font-semibold leading-7 text-on-surface">
+                  Recent Activity
+                </h3>
+                <Link
+                  href="/activity/validations"
+                  className="text-xs font-semibold uppercase tracking-[0.02em] text-primary hover:underline"
+                >
+                  View all
+                </Link>
+              </div>
+              <div className="divide-y divide-outline-variant">
+                {activityFeed.length === 0 ? (
+                  <p className="p-4 text-sm text-on-surface-variant">
+                    No recent activity yet.
+                  </p>
+                ) : (
+                  activityFeed.map((item) => {
+                    const Icon =
+                      item.type === "validation"
+                        ? RuleIcon
+                        : item.type === "comparison"
+                          ? CompareIcon
+                          : HubIcon;
+                    return (
+                      <Link
+                        key={item.id}
+                        href={item.href}
+                        className="flex items-center gap-4 p-4 transition-colors hover:bg-surface-container-low"
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-primary-container/10 text-primary">
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-base font-semibold text-on-surface">
+                            {item.name}
+                          </p>
+                          <p className="mt-1 truncate text-xs text-on-surface-variant">
+                            <span className="font-bold uppercase tracking-wide">
+                              {item.projectName}
+                            </span>
+                            {" · "}
+                            {item.meta}
+                          </p>
+                        </div>
+                      </Link>
+                    );
+                  })
+                )}
+              </div>
             </SectionCard>
-          ) : null}
+          </div>
+
+          <div className="space-y-gutter lg:col-span-1">
+            <MigrationReadiness
+              compact
+              score={readiness.score}
+              breakdown={readiness.breakdown}
+            />
+            <NeedsAttentionPanel issues={attentionIssues} />
+          </div>
         </div>
-      </div>
-    </>
+      )}
+    </div>
   );
 }

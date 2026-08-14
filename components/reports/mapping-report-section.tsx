@@ -1,7 +1,5 @@
 import Link from "next/link";
 import { ProgressBar } from "@/components/ui/progress";
-import { HubIcon } from "@/components/ui/icons";
-import { ReportPillarSection } from "@/components/reports/report-pillar-section";
 import type { MappingReportSection } from "@/data/project-report";
 
 type MappingReportSectionProps = {
@@ -19,16 +17,11 @@ function MiniStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function MappingReportSectionView({ mapping }: MappingReportSectionProps) {
+export function MappingReportContent({ mapping }: MappingReportSectionProps) {
   const mappedFields = mapping.totalFields - mapping.unmappedFields;
 
   return (
-    <ReportPillarSection
-      title="Field Mapping"
-      icon={HubIcon}
-      toolHref="/field-mapping"
-      toolLabel="Open Field Mapping"
-    >
+    <>
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <MiniStat label="Total Fields" value={String(mapping.totalFields)} />
         <MiniStat label="Mapped" value={String(mappedFields)} />
@@ -55,20 +48,20 @@ export function MappingReportSectionView({ mapping }: MappingReportSectionProps)
             </p>
           ) : (
             mapping.recentRuns.map((run) => (
-            <Link
-              key={run.id}
-              href={`/field-mapping/${run.id}`}
-              className="flex items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-surface-container-low"
-            >
-              <span className="font-semibold text-on-surface">{run.name}</span>
-              <span className="font-mono text-xs text-on-surface-variant">
-                {run.unmapped} unmapped
-              </span>
-            </Link>
+              <Link
+                key={run.id}
+                href={`/field-mapping/${run.id}`}
+                className="flex items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-surface-container-low"
+              >
+                <span className="font-semibold text-on-surface">{run.name}</span>
+                <span className="font-mono text-xs text-on-surface-variant">
+                  {run.unmapped} unmapped
+                </span>
+              </Link>
             ))
           )}
         </div>
       </div>
-    </ReportPillarSection>
+    </>
   );
 }
