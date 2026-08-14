@@ -5,7 +5,7 @@ import {
   type FieldDataType,
   type ValidationFieldRule,
 } from "@/data/validation";
-import apiClient from "@/lib/axios";
+import { sapCharLength, sapFieldKey } from "@/lib/sap-field-types";
 import { trackJob } from "@/lib/job-tracker";
 
 export type ValidationRunDetail = {
@@ -202,19 +202,30 @@ export function mergeSuggestedRules(
   suggestions: SuggestedField[],
 ): ValidationFieldRule[] {
   const byName = new Map(suggestions.map((item) => [item.field_name, item]));
+  const byKey = new Map(suggestions.map((item) => [sapFieldKey(item.field_name), item]));
   return current.map((row) => {
     if (row.ruleSource === "user") {
       return row;
     }
-    const suggestion = byName.get(row.fieldName);
+    const suggestion =
+      byName.get(row.fieldName) ?? byKey.get(sapFieldKey(row.fieldName));
     if (!suggestion) {
       return row;
     }
+    const sapLength = sapCharLength(row.fieldName);
+    let dataType: FieldDataType = suggestion.data_type || "string";
+    let length = suggestion.max_length;
+    if (sapLength != null) {
+      dataType = "char";
+      length = sapLength;
+    } else if (dataType === "int") {
+      dataType = "char";
+    }
     const config = {
       caseFormat: suggestion.case_format ?? null,
-      dataType: suggestion.data_type || "string",
-      length: suggestion.max_length,
-      decimalLength: suggestion.decimal_length,
+      dataType,
+      length,
+      decimalLength: dataType === "decimal" ? suggestion.decimal_length : null,
       regex: suggestion.regex ?? "",
       regexPrompt: suggestion.regex_prompt ?? "",
     };

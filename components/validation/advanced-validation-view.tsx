@@ -136,6 +136,7 @@ export function AdvancedValidationView({ editRunId }: AdvancedValidationViewProp
       const merged = mergeSuggestedRules(rules, result.suggestions);
       setRules(merged);
       setInitialRules(merged);
+      setFieldsVersion((current) => current + 1);
       if (result.warning) {
         setAiWarning(result.warning);
       }
