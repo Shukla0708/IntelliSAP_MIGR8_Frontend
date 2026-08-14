@@ -2,11 +2,9 @@ import Link from "next/link";
 import type { ComponentType } from "react";
 import {
   CheckCircleIcon,
-  CompareIcon,
   DifferenceIcon,
   WarningIcon,
 } from "@/components/ui/icons";
-import { ReportPillarSection } from "@/components/reports/report-pillar-section";
 import type { ComparisonReportSection } from "@/data/project-report";
 
 type ComparisonReportSectionProps = {
@@ -49,16 +47,9 @@ function SummaryCard({
   );
 }
 
-export function ComparisonReportSectionView({
-  comparison,
-}: ComparisonReportSectionProps) {
+export function ComparisonReportContent({ comparison }: ComparisonReportSectionProps) {
   return (
-    <ReportPillarSection
-      title="Comparison"
-      icon={CompareIcon}
-      toolHref="/compare"
-      toolLabel="Open Comparison"
-    >
+    <>
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <SummaryCard
           label="Matched"
@@ -93,20 +84,20 @@ export function ComparisonReportSectionView({
             </p>
           ) : (
             comparison.recentRuns.map((run) => (
-            <Link
-              key={run.id}
-              href={`/compare/${run.id}`}
-              className="flex items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-surface-container-low"
-            >
-              <span className="font-semibold text-on-surface">{run.name}</span>
-              <span className="font-mono text-xs text-tertiary">
-                {run.mismatches} mismatches
-              </span>
-            </Link>
+              <Link
+                key={run.id}
+                href={`/compare/${run.id}`}
+                className="flex items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-surface-container-low"
+              >
+                <span className="font-semibold text-on-surface">{run.name}</span>
+                <span className="font-mono text-xs text-tertiary">
+                  {run.mismatches} mismatches
+                </span>
+              </Link>
             ))
           )}
         </div>
       </div>
-    </ReportPillarSection>
+    </>
   );
 }

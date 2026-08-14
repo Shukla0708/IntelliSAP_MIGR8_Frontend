@@ -71,7 +71,7 @@ export function KpiCard({ metric }: KpiCardProps) {
         </span>
         {Icon ? <Icon className={`mb-1 h-4 w-4 ${styles.icon}`} /> : null}
         {metric.hint ? (
-          <span className="mb-1 text-[13px] leading-[18px] text-outline">
+          <span className="mb-1 max-w-[8rem] truncate text-[13px] leading-[18px] text-outline">
             {metric.hint}
           </span>
         ) : null}
