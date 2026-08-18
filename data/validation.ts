@@ -76,7 +76,7 @@ export type FieldRuleConfig = {
   regexPrompt: string; // plain-English rule; Groq generates regex
 };
 
-export type RuleSource = "user" | "ai" | "default";
+export type RuleSource = "user" | "ai" | "default" | "learned";
 
 export type ValidationFieldRule = {
   id: string;

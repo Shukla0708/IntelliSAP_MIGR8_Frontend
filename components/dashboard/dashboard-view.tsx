@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import type { ActivityValidationRun } from "@/components/activity/activity-validations-list";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { KpiGrid, SectionCard } from "@/components/dashboard/kpi-card";
 import { MigrationReadiness } from "@/components/dashboard/migration-readiness";
@@ -12,46 +11,53 @@ import {
   NeedsAttentionPanel,
 } from "@/components/dashboard/needs-attention-panel";
 import { RecentProjects } from "@/components/dashboard/recent-projects";
-import {
-  CompareIcon,
-  HubIcon,
-  RuleIcon,
-} from "@/components/ui/icons";
+import { CompareIcon, HubIcon, RuleIcon } from "@/components/ui/icons";
 import { useProject } from "@/contexts/project-context";
-import { toFieldMappingRunStatus } from "@/data/field-mapping";
 import type { KpiMetric, RecentProject } from "@/data/dashboard";
 import apiClient from "@/lib/axios";
-import {
-  fetchComparisonRuns,
-  type ComparisonRunListItem,
-} from "@/lib/comparison-api";
 import { formatCompact } from "@/lib/format-metrics";
-import {
-  fetchMappingRuns,
-  fetchMappingStats,
-  type MappingRunListItem,
-  type MappingStats,
-} from "@/lib/mapping-api";
 
-type ActivityFeedItem = {
-  id: string;
-  type: "validation" | "comparison" | "mapping";
-  name: string;
-  projectName: string;
-  href: string;
-  meta: string;
+type DashboardPayload = {
+  kpis: {
+    activeProjects: number;
+    validationRuns: number;
+    completedRuns: number;
+    recordsValidated: number;
+    validationErrors: number;
+    comparisonMismatches: number;
+    failedRuns: number;
+    unmappedFields: number;
+  };
+  mappingStats: {
+    approved: number;
+    awaitingApproval: number;
+    processing: number;
+    failed: number;
+    total: number;
+  };
+  readiness: {
+    score: number;
+    validation: number;
+    comparison: number;
+    mapping: number;
+    failed: number;
+  };
+  recentProjects: Array<{
+    id: string;
+    name: string;
+    runCount: number;
+    records: number;
+    createdAt: string | null;
+  }>;
+  activity: Array<{
+    id: string;
+    type: "validation" | "comparison" | "mapping";
+    name: string;
+    projectName: string;
+    href: string;
+    meta: string;
+  }>;
 };
-
-function parseRecordCount(records: string): number {
-  const match = records.match(/([\d.]+)\s*([kKmM])?/);
-  if (!match) return 0;
-  const value = Number(match[1]);
-  if (Number.isNaN(value)) return 0;
-  const suffix = (match[2] ?? "").toLowerCase();
-  if (suffix === "k") return Math.round(value * 1000);
-  if (suffix === "m") return Math.round(value * 1_000_000);
-  return Math.round(value);
-}
 
 export function DashboardHeader() {
   return (
@@ -67,139 +73,71 @@ export function DashboardHeader() {
   );
 }
 
-function QuickActions() {
-  const actions = [
-    { label: "Start Validation", href: "/validation/new", primary: true },
-    { label: "Start Comparison", href: "/compare/new", primary: false },
-    { label: "Start Mapping", href: "/field-mapping/new", primary: false },
-  ];
-
-  return (
-    <div className="flex flex-wrap gap-3">
-      {actions.map((action) => (
-        <Link
-          key={action.href}
-          href={action.href}
-          className={
-            action.primary
-              ? "inline-flex h-10 items-center justify-center rounded bg-primary-container px-4 text-sm font-semibold text-on-primary shadow-sm transition-colors hover:bg-primary"
-              : "inline-flex h-10 items-center justify-center rounded border border-outline-variant px-4 text-sm font-semibold text-primary transition-colors hover:bg-surface-container-high"
-          }
-        >
-          {action.label}
-        </Link>
-      ))}
-    </div>
-  );
-}
-
 export function DashboardView() {
   const router = useRouter();
-  const { projects, selectProject, loading: projectsLoading } = useProject();
-  const [runs, setRuns] = useState<ActivityValidationRun[]>([]);
-  const [comparisons, setComparisons] = useState<ComparisonRunListItem[]>([]);
-  const [mappings, setMappings] = useState<MappingRunListItem[]>([]);
-  const [mappingStats, setMappingStats] = useState<MappingStats | null>(null);
-  const [runsLoading, setRunsLoading] = useState(true);
+  const { selectProject, loading: projectsLoading } = useProject();
+  const [data, setData] = useState<DashboardPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+        const { data: payload } = await apiClient.get<DashboardPayload>("/api/dashboard/");
+    setData(payload);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    apiClient
-      .get<ActivityValidationRun[]>("/api/runs/", { params: { limit: 100 } })
-      .then((res) => {
-        if (!cancelled) setRuns(res.data);
-      })
+    setLoading(true);
+    load()
       .catch(() => {
-        if (!cancelled) setRuns([]);
+        if (!cancelled) setData(null);
       })
       .finally(() => {
-        if (!cancelled) setRunsLoading(false);
-      });
-    fetchComparisonRuns({ limit: 100 })
-      .then((rows) => {
-        if (!cancelled) setComparisons(rows);
-      })
-      .catch(() => {
-        if (!cancelled) setComparisons([]);
-      });
-    fetchMappingStats()
-      .then((stats) => {
-        if (!cancelled) setMappingStats(stats);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setMappingStats({
-            approved: 0,
-            awaitingApproval: 0,
-            processing: 0,
-            failed: 0,
-            total: 0,
-          });
-        }
-      });
-    fetchMappingRuns({ limit: 8 })
-      .then((rows) => {
-        if (!cancelled) setMappings(rows);
-      })
-      .catch(() => {
-        if (!cancelled) setMappings([]);
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [load]);
 
   const metrics: KpiMetric[] = useMemo(() => {
-    const totalRecords = runs.reduce(
-      (sum, run) => sum + parseRecordCount(run.records),
-      0,
-    );
-    const totalErrors = runs.reduce((sum, run) => sum + (run.errors || 0), 0);
-    const completedRuns = runs.filter((run) => run.status === "completed").length;
-    const comparisonMismatches = comparisons.reduce(
-      (sum, run) => sum + run.mismatches,
-      0,
-    );
-    const mappingReviewable = mappingStats
-      ? mappingStats.approved + mappingStats.awaitingApproval
-      : 0;
-    const mappingApproved = mappingStats?.approved ?? 0;
+    if (!data) return [];
+    const mappingReviewable =
+      data.mappingStats.approved + data.mappingStats.awaitingApproval;
     const mappingApproval =
       mappingReviewable === 0
         ? 0
-        : Math.round((mappingApproved / mappingReviewable) * 100);
-
+        : Math.round((data.mappingStats.approved / mappingReviewable) * 100);
     return [
       {
         id: "active-projects",
         label: "Active Projects",
-        value: String(projects.length),
+        value: String(data.kpis.activeProjects),
         tone: "primary",
         icon: "trendingUp",
       },
       {
         id: "files-processed",
         label: "Validation Runs",
-        value: String(runs.length),
-        hint: `${completedRuns} completed`,
+        value: String(data.kpis.validationRuns),
+        hint: `${data.kpis.completedRuns} completed`,
       },
       {
         id: "records-validated",
         label: "Records Validated",
-        value: formatCompact(totalRecords),
+        value: formatCompact(data.kpis.recordsValidated),
         icon: "check",
       },
       {
         id: "validation-errors",
         label: "Validation Errors",
-        value: formatCompact(totalErrors),
+        value: formatCompact(data.kpis.validationErrors),
         tone: "error",
         icon: "warning",
       },
       {
         id: "comparison-mismatches",
         label: "Comparison Mismatches",
-        value: formatCompact(comparisonMismatches),
+        value: formatCompact(data.kpis.comparisonMismatches),
         tone: "tertiary",
         icon: "difference",
         hint: "From comparison runs",
@@ -210,174 +148,53 @@ export function DashboardView() {
         value: `${mappingApproval}%`,
         progress: mappingApproval,
         hint:
-          mappingStats == null
-            ? "Loading…"
-            : mappingReviewable === 0
-              ? "No mappings yet"
-              : `${mappingApproved} of ${mappingReviewable} approved`,
+          mappingReviewable === 0
+            ? "No mappings yet"
+            : `${data.mappingStats.approved} of ${mappingReviewable} approved`,
       },
     ];
-  }, [comparisons, mappingStats, projects.length, runs]);
+  }, [data]);
 
   const recentProjects: RecentProject[] = useMemo(() => {
-    const runCounts = new Map<string, number>();
-    const recordTotals = new Map<string, number>();
-    for (const run of runs) {
-      runCounts.set(
-        run.project_id,
-        (runCounts.get(run.project_id) ?? 0) + 1,
-      );
-      recordTotals.set(
-        run.project_id,
-        (recordTotals.get(run.project_id) ?? 0) + parseRecordCount(run.records),
-      );
-    }
-    return projects.slice(0, 5).map((project) => {
-      const runCount = runCounts.get(project.id) ?? 0;
-      const records = recordTotals.get(project.id) ?? 0;
-      return {
-        id: project.id,
-        name: project.name,
-        records:
-          runCount > 0
-            ? `${runCount} run${runCount === 1 ? "" : "s"} · ${formatCompact(records)} records`
-            : "No runs yet",
-        updated: project.updated,
-        icon: (runCount > 0 ? "sync" : "draft") as RecentProject["icon"],
-        accent: (runCount > 0 ? "primary" : "muted") as RecentProject["accent"],
-      };
-    });
-  }, [projects, runs]);
-
-  const activityFeed: ActivityFeedItem[] = useMemo(() => {
-    const validationItems: ActivityFeedItem[] = runs.slice(0, 5).map((run) => ({
-      id: `val-${run.id}`,
-      type: "validation",
-      name: run.name,
-      projectName: run.project_name,
-      href: `/validation_result/${run.id}`,
-      meta: `${run.errors} errors · ${run.status}`,
+    if (!data) return [];
+    return data.recentProjects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      records:
+        project.runCount > 0
+          ? `${project.runCount} run${project.runCount === 1 ? "" : "s"} · ${formatCompact(project.records)} records`
+          : "No runs yet",
+      updated: project.createdAt
+        ? `Created ${new Date(project.createdAt).toLocaleString()}`
+        : "Recently created",
+      icon: (project.runCount > 0 ? "sync" : "draft") as RecentProject["icon"],
+      accent: (project.runCount > 0 ? "primary" : "muted") as RecentProject["accent"],
     }));
+  }, [data]);
 
-    const comparisonItems: ActivityFeedItem[] = comparisons.slice(0, 2).map((run) => ({
-      id: `cmp-${run.id}`,
-      type: "comparison",
-      name: run.name,
-      projectName: run.projectName,
-      href: `/compare/${run.id}`,
-      meta: `${run.mismatches} mismatches`,
-    }));
-
-    const mappingItems: ActivityFeedItem[] = mappings.slice(0, 2).map((run) => {
-      const status = toFieldMappingRunStatus(run.status);
-      const unmapped = Math.max(run.totalSourceFields - run.confirmedFieldCount, 0);
-      return {
-        id: `map-${run.mappingRunId}`,
-        type: "mapping" as const,
-        name: run.mappingName || "New field mapping run",
-        projectName: run.projectName,
-        href: `/field-mapping/${run.mappingRunId}`,
-        meta:
-          status === "awaiting_approval"
-            ? "Waiting for approval"
-            : `${unmapped} unmapped`,
-      };
+  const attentionIssues = useMemo(() => {
+    if (!data) return [];
+    return buildDashboardAttentionIssues({
+      failedRuns: data.readiness.failed,
+      totalErrors: data.kpis.validationErrors,
+      comparisonMismatches: data.kpis.comparisonMismatches,
+      awaitingApproval: data.mappingStats.awaitingApproval,
+      unmappedFields: data.kpis.unmappedFields,
     });
+  }, [data]);
 
-    return [...validationItems, ...comparisonItems, ...mappingItems].slice(0, 8);
-  }, [comparisons, mappings, runs]);
-
-  const readiness = useMemo(() => {
-    const completed = runs.filter((r) => r.status === "completed").length;
-    const failed = runs.filter((r) => r.status === "failed").length;
-    const validationScore =
-      runs.length === 0
-        ? 0
-        : Math.round((completed / Math.max(runs.length, 1)) * 100);
-    const comparisonScore =
-      comparisons.length === 0
-        ? 0
-        : Math.round(
-            (comparisons.filter((r) => r.status === "completed").length /
-              comparisons.length) *
-              100,
-          );
-    const mappingReviewable = mappingStats
-      ? mappingStats.approved + mappingStats.awaitingApproval
-      : 0;
-    const mappingScore =
-      mappingStats == null || mappingReviewable === 0
-        ? 0
-        : Math.round((mappingStats.approved / mappingReviewable) * 100);
-    const score = Math.round(
-      (validationScore + comparisonScore + mappingScore) / 3,
-    );
-    return {
-      score: Number.isFinite(score) ? score : 0,
-      breakdown: [
-        { label: "Validation", value: validationScore, barClassName: "bg-primary" },
-        { label: "Comparison", value: comparisonScore, barClassName: "bg-primary" },
-        {
-          label: "Mapping",
-          value: mappingScore,
-          barClassName: "bg-secondary-container",
-        },
-      ],
-      failed,
-    };
-  }, [comparisons, mappingStats, runs]);
-
-  const unmappedFields = useMemo(
-    () =>
-      mappings.reduce(
-        (sum, run) => sum + Math.max(run.totalSourceFields - run.confirmedFieldCount, 0),
-        0,
-      ),
-    [mappings],
-  );
-
-  const totalErrors = useMemo(
-    () => runs.reduce((sum, run) => sum + (run.errors || 0), 0),
-    [runs],
-  );
-
-  const comparisonMismatches = useMemo(
-    () => comparisons.reduce((sum, run) => sum + run.mismatches, 0),
-    [comparisons],
-  );
-
-  const attentionIssues = useMemo(
-    () =>
-      buildDashboardAttentionIssues({
-        failedRuns: readiness.failed,
-        totalErrors,
-        comparisonMismatches,
-        awaitingApproval: mappingStats?.awaitingApproval ?? 0,
-        unmappedFields,
-      }),
-    [
-      comparisonMismatches,
-      mappingStats?.awaitingApproval,
-      readiness.failed,
-      totalErrors,
-      unmappedFields,
-    ],
-  );
-
-  const loading = projectsLoading || runsLoading;
+  const showSkeleton = projectsLoading || loading || !data;
 
   return (
     <div className="mx-auto w-full max-w-[1200px]">
       <DashboardHeader />
 
-      {loading ? (
+      {showSkeleton ? (
         <DashboardSkeleton showSections />
       ) : (
         <div className="grid grid-cols-1 gap-gutter lg:grid-cols-4">
           <div className="space-y-gutter lg:col-span-3">
             <KpiGrid metrics={metrics} />
-            {/* <QuickActions /> */}
-
             <RecentProjects
               projects={recentProjects}
               onSelectProject={(projectId) => {
@@ -385,7 +202,6 @@ export function DashboardView() {
                 router.push("/validation");
               }}
             />
-
             <SectionCard className="overflow-hidden shadow-ambient">
               <div className="flex items-center justify-between border-b border-outline-variant bg-surface-container-lowest p-4">
                 <h3 className="text-xl font-semibold leading-7 text-on-surface">
@@ -399,12 +215,12 @@ export function DashboardView() {
                 </Link>
               </div>
               <div className="divide-y divide-outline-variant">
-                {activityFeed.length === 0 ? (
+                {data.activity.length === 0 ? (
                   <p className="p-4 text-sm text-on-surface-variant">
                     No recent activity yet.
                   </p>
                 ) : (
-                  activityFeed.map((item) => {
+                  data.activity.map((item) => {
                     const Icon =
                       item.type === "validation"
                         ? RuleIcon
@@ -439,12 +255,15 @@ export function DashboardView() {
               </div>
             </SectionCard>
           </div>
-
           <div className="space-y-gutter lg:col-span-1">
             <MigrationReadiness
               compact
-              score={readiness.score}
-              breakdown={readiness.breakdown}
+              score={data.readiness.score}
+              breakdown={[
+                { label: "Validation", value: data.readiness.validation, barClassName: "bg-primary" },
+                { label: "Comparison", value: data.readiness.comparison, barClassName: "bg-primary" },
+                { label: "Mapping", value: data.readiness.mapping, barClassName: "bg-secondary-container" },
+              ]}
             />
             <NeedsAttentionPanel issues={attentionIssues} />
           </div>

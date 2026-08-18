@@ -2,7 +2,7 @@ export type PasswordStrength = "empty" | "weak" | "fair" | "strong";
 
 export function getPasswordStrength(password: string): PasswordStrength {
   if (password.length === 0) return "empty";
-  if (password.length < 6) return "weak";
+  if (password.length < 8) return "weak";
   if (password.length < 10) return "fair";
   return "strong";
 }

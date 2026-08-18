@@ -1,11 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_PATHS = new Set(["/sign-in", "/register"]);
-const TOKEN_COOKIE = "migr8_token";
+const SESSION_COOKIES = ["migr8_session", "migr8_access", "migr8_token"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const token = request.cookies.get(TOKEN_COOKIE)?.value;
+  const token = SESSION_COOKIES.some((name) => request.cookies.get(name)?.value);
   const isPublic = PUBLIC_PATHS.has(pathname);
 
   if (!token && !isPublic) {

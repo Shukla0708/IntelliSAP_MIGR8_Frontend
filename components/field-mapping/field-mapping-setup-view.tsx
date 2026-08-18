@@ -7,7 +7,7 @@ import { NumberRangeDialog } from "@/components/field-mapping/number-range-dialo
 import { SchemaUploadPanel } from "@/components/field-mapping/schema-upload-panel";
 import { SCHEMA_UPLOAD_CARDS } from "@/data/field-mapping";
 import { getApiErrorMessage } from "@/lib/axios";
-import { createMappingRun, type NumberRangeType } from "@/lib/mapping-api";
+import { createMappingRun, fetchSapTableFields, type NumberRangeType } from "@/lib/mapping-api";
 import { useDefaultProject } from "@/lib/use-default-project";
 
 export function FieldMappingSetupView() {
@@ -17,6 +17,8 @@ export function FieldMappingSetupView() {
   const [targetFile, setTargetFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sapBusy, setSapBusy] = useState(false);
+  const [sapError, setSapError] = useState<string | null>(null);
   const [numberRangeDialogOpen, setNumberRangeDialogOpen] = useState(false);
 
   const files: Record<"source" | "target", File | null> = {
@@ -27,6 +29,28 @@ export function FieldMappingSetupView() {
   function handleFileSelected(cardId: "source" | "target", file: File) {
     if (cardId === "source") setSourceFile(file);
     else setTargetFile(file);
+  }
+
+  async function handleSapFetch(table: string) {
+    setSapError(null);
+    setSapBusy(true);
+    try {
+      const result = await fetchSapTableFields(table);
+      const header = "SAP Table,SAP Field,Description,Datatype,Length";
+      const lines = result.fields.map((field) => {
+        const sapTable = field.sap_table || result.table;
+        const sapField = field.sap_field || "";
+        const desc = String(field.description || "").replaceAll(",", " ");
+        return `${sapTable},${sapField},${desc},${field.datatype || ""},${field.length ?? ""}`;
+      });
+      const csv = [header, ...lines].join("\n");
+      const file = new File([csv], `${result.table}-ddic.csv`, { type: "text/csv" });
+      setTargetFile(file);
+    } catch (err) {
+      setSapError(getApiErrorMessage(err, "Could not fetch SAP fields. Upload a target file instead."));
+    } finally {
+      setSapBusy(false);
+    }
   }
 
   function handleStartMapping() {
@@ -77,6 +101,9 @@ export function FieldMappingSetupView() {
               card={card}
               file={files[card.id]}
               onFileSelected={(file) => handleFileSelected(card.id, file)}
+              sapBusy={card.id === "target" ? sapBusy : undefined}
+              sapError={card.id === "target" ? sapError : undefined}
+              onSapFetch={card.id === "target" ? handleSapFetch : undefined}
             />
           ))}
         </div>

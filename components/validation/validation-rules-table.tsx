@@ -154,6 +154,12 @@ export function ValidationRulesTable({
         {aiWarning ? (
           <p className="mb-3 text-xs text-on-surface-variant">{aiWarning}</p>
         ) : null}
+        {rows.some((row) => row.ruleSource === "learned") ? (
+          <p className="mb-3 rounded-lg bg-primary-container/10 px-3 py-2 text-xs leading-5 text-on-surface-variant">
+            Some rules are based on a confirmed org standard (for example BUKRS).
+            They are suggestions — you can still edit them.
+          </p>
+        ) : null}
         {rows.some((row) => row.ruleSource === "ai") ? (
           <p className="mb-3 rounded-lg bg-primary-container/10 px-3 py-2 text-xs leading-5 text-on-surface-variant">
             Rules came from AI analysis of column names and sample values. They
@@ -187,6 +193,11 @@ export function ValidationRulesTable({
                 <tr key={row.id} className="transition-colors hover:bg-surface-container-low/50">
                   <td className="px-4 py-3">
                     <div className="font-medium">{row.fieldName}</div>
+                    {row.ruleSource === "learned" ? (
+                      <span className="mt-1 inline-flex items-center gap-1 rounded bg-primary-container/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                        Based on a confirmed org rule
+                      </span>
+                    ) : null}
                     {row.ruleSource === "ai" ? (
                       <span className="mt-1 inline-flex items-center gap-1 rounded bg-primary-container/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
                         <AutoAwesomeIcon className="h-2.5 w-2.5" />

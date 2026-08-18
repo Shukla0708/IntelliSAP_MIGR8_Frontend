@@ -15,12 +15,7 @@ import {
   logoutRequest,
   register as registerRequest,
 } from "@/lib/auth-api";
-import {
-  clearSession,
-  getStoredUser,
-  getToken,
-  setSession,
-} from "@/lib/auth-storage";
+import { clearSession, getStoredUser, setSession } from "@/lib/auth-storage";
 import type {
   AuthUser,
   LoginPayload,
@@ -45,41 +40,25 @@ type AuthProviderProps = {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
 
     async function hydrate() {
-      const storedToken = getToken();
       const storedUser = getStoredUser();
-
-      if (!storedToken) {
-        if (!cancelled) {
-          setUser(null);
-          setToken(null);
-          setIsLoading(false);
-        }
-        return;
-      }
-
-      if (!cancelled) {
-        setToken(storedToken);
-        if (storedUser) setUser(storedUser);
-      }
+      if (storedUser && !cancelled) setUser(storedUser);
 
       try {
         const me = await fetchMe();
         if (!cancelled) {
           setUser(me);
-          setSession(storedToken, me);
+          setSession(null, me);
         }
       } catch {
         if (!cancelled) {
           clearSession();
           setUser(null);
-          setToken(null);
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -94,15 +73,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const login = useCallback(async (payload: LoginPayload) => {
     const response = await loginRequest(payload);
-    setSession(response.token, response.user);
-    setToken(response.token);
+    setSession(response.token ?? null, response.user);
     setUser(response.user);
   }, []);
 
   const register = useCallback(async (payload: RegisterPayload) => {
     const response = await registerRequest(payload);
-    setSession(response.token, response.user);
-    setToken(response.token);
+    setSession(response.token ?? null, response.user);
     setUser(response.user);
   }, []);
 
@@ -113,7 +90,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Always clear local session even if the API call fails
     } finally {
       clearSession();
-      setToken(null);
       setUser(null);
     }
   }, []);
@@ -121,14 +97,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
-      token,
+      token: user ? "cookie" : null,
       isLoading,
-      isAuthenticated: Boolean(token && user),
+      isAuthenticated: Boolean(user),
       login,
       register,
       logout,
     }),
-    [user, token, isLoading, login, register, logout],
+    [user, isLoading, login, register, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

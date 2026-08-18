@@ -5,22 +5,12 @@ import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { VisibilityIcon, VisibilityOffIcon } from "@/components/ui/icons";
 import { PasswordStrengthMeter } from "@/components/ui/password-strength-meter";
+import { getApiErrorMessage } from "@/lib/axios";
 import { TextField } from "@/components/ui/text-field";
 import { useAuth } from "@/contexts/auth-context";
 
 function getErrorMessage(error: unknown) {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "response" in error &&
-    typeof (error as { response?: { data?: { detail?: unknown } } }).response
-      ?.data?.detail === "string"
-  ) {
-    return (error as { response: { data: { detail: string } } }).response.data
-      .detail;
-  }
-  if (error instanceof Error && error.message) return error.message;
-  return "Unable to register. Please try again.";
+  return getApiErrorMessage(error, "Unable to register. Please try again.");
 }
 
 export function RegisterForm() {

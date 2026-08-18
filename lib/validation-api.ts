@@ -35,7 +35,7 @@ export type ValidationRunDetail = {
     decimal_length: number | null;
     regex: string | null;
     regex_prompt: string | null;
-    rule_source?: "user" | "ai" | "default";
+    rule_source?: "user" | "ai" | "default" | "learned";
   }>;
 };
 
@@ -243,7 +243,7 @@ export function mergeSuggestedRules(
         date: suggestion.flag_date,
         specialChars: suggestion.flag_special_chars,
       },
-      ruleSource: "ai" as const,
+      ruleSource: (suggestion.rule_source === "learned" ? "learned" : "ai") as const,
     };
   });
 }

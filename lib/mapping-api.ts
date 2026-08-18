@@ -245,3 +245,24 @@ export function toFieldMappingWorkspace(
     defaultActiveRowId: rows[0]?.id ?? "",
   };
 }
+
+export type SapTableField = {
+  sap_table?: string;
+  sap_field?: string;
+  description?: string;
+  datatype?: string;
+  length?: number | null;
+};
+
+export async function fetchSapTableFields(table: string): Promise<{
+  table: string;
+  fields: SapTableField[];
+  source: string;
+}> {
+  const { data } = await apiClient.post<{
+    table: string;
+    fields: SapTableField[];
+    source: string;
+  }>("/api/mappings/sap-fields", { table: table.trim().toUpperCase() });
+  return data;
+}

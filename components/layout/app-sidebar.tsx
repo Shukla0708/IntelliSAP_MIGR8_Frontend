@@ -15,6 +15,7 @@ import {
   SettingsIcon,
 } from "@/components/ui/icons";
 import { ProfileMenu } from "@/components/layout/profile-menu";
+import { useAuth } from "@/contexts/auth-context";
 import { useProject } from "@/contexts/project-context";
 import {
   SIDEBAR_ACTIVITY,
@@ -205,6 +206,8 @@ function ProjectSwitcher({ onNavigate }: { onNavigate?: () => void }) {
 
 export function AppSidebar({ className = "", onNavigate }: AppSidebarProps) {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   return (
     <nav
@@ -253,6 +256,13 @@ export function AppSidebar({ className = "", onNavigate }: AppSidebarProps) {
               onNavigate={onNavigate}
             />
           ))}
+          {isAdmin ? (
+            <NavLink
+              item={{ label: "Admin", href: "/admin", icon: "settings" }}
+              active={pathname === "/admin" || pathname.startsWith("/admin/")}
+              onNavigate={onNavigate}
+            />
+          ) : null}
         </div>
 
         <div>

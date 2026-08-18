@@ -2,11 +2,12 @@ export type AuthUser = {
   id: string;
   fullName: string;
   email: string;
+  role?: "admin" | "member";
 };
 
 export type AuthResponse = {
-  token: string;
   user: AuthUser;
+  token?: string | null;
 };
 
 export type LoginPayload = {

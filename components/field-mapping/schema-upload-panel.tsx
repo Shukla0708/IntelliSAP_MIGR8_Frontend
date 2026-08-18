@@ -18,12 +18,18 @@ type SchemaUploadPanelProps = {
   card: SchemaUploadCard;
   file?: File | null;
   onFileSelected: (file: File) => void;
+  sapError?: string | null;
+  sapBusy?: boolean;
+  onSapFetch?: (table: string) => Promise<void> | void;
 };
 
 export function SchemaUploadPanel({
   card,
   file,
   onFileSelected,
+  sapError,
+  sapBusy,
+  onSapFetch,
 }: SchemaUploadPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [sapTableName, setSapTableName] = useState("");
@@ -39,9 +45,9 @@ export function SchemaUploadPanel({
     onFileSelected(selected);
   }
 
-  function handleSapFetch() {
-    if (!sapTableName.trim()) return;
-    console.info("SAP table fetch clicked (mock)", { table: sapTableName });
+  async function handleSapFetch() {
+    if (!sapTableName.trim() || !onSapFetch) return;
+    await onSapFetch(sapTableName.trim());
   }
 
   return (
@@ -107,11 +113,16 @@ export function SchemaUploadPanel({
               <Button
                 type="button"
                 onClick={handleSapFetch}
-                className="h-auto shrink-0 gap-2 rounded bg-primary px-4 py-2 text-xs font-semibold uppercase tracking-[0.02em] text-on-primary shadow-none hover:bg-primary hover:opacity-90"
+                disabled={sapBusy || !sapTableName.trim()}
+                className="h-auto shrink-0 gap-2 rounded bg-primary px-4 py-2 text-xs font-semibold uppercase tracking-[0.02em] text-on-primary shadow-none hover:bg-primary hover:opacity-90 disabled:opacity-50"
               >
                 <DownloadIcon className="h-4 w-4" />
-                {card.sapFetch.buttonLabel}
+                {sapBusy ? "Fetching…" : card.sapFetch.buttonLabel}
               </Button>
+            </div>
+            {sapError ? (
+              <p className="text-xs text-error">{sapError}</p>
+            ) : null}
             </div>
           </div>
         </div>

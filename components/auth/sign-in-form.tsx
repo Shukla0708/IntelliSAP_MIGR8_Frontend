@@ -5,22 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { LockIcon, MailIcon } from "@/components/ui/icons";
+import { getApiErrorMessage } from "@/lib/axios";
 import { TextField } from "@/components/ui/text-field";
 import { useAuth } from "@/contexts/auth-context";
 
 function getErrorMessage(error: unknown) {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "response" in error &&
-    typeof (error as { response?: { data?: { detail?: unknown } } }).response
-      ?.data?.detail === "string"
-  ) {
-    return (error as { response: { data: { detail: string } } }).response.data
-      .detail;
-  }
-  if (error instanceof Error && error.message) return error.message;
-  return "Unable to sign in. Please try again.";
+  return getApiErrorMessage(error, "Unable to sign in. Please try again.");
 }
 
 export function SignInForm() {
