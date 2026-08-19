@@ -18,6 +18,7 @@ import type {
   ExceptionSeverity,
   ValidationException,
   ValidationResultSummary,
+  DuplicateGroupsPayload,
 } from "@/data/validation-results";
 
 type ValidationResultsViewProps = {
@@ -310,6 +311,8 @@ export function ValidationResultsView({ result }: ValidationResultsViewProps) {
         <ErrorsByFieldChart items={result.errorsByField} />
       </div>
 
+      <DuplicateGroupsPanel groups={result.duplicateGroups} />
+
       <div className="mb-8 overflow-hidden rounded-xl border border-outline-variant bg-surface shadow-ambient">
         <div className="flex flex-col gap-3 border-b border-outline-variant p-4 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-xl font-semibold leading-7 text-on-surface">
@@ -379,6 +382,78 @@ export function ValidationResultsView({ result }: ValidationResultsViewProps) {
             Download Full Report (.xlsx)
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function DuplicateGroupsPanel({
+  groups,
+}: {
+  groups?: DuplicateGroupsPayload | null;
+}) {
+  if (!groups) return null;
+  if (groups.skippedReason && groups.groupCount === 0) {
+    return (
+      <div className="mb-8 rounded-xl border border-outline-variant bg-surface p-6 shadow-ambient">
+        <h3 className="text-xl font-semibold leading-7 text-on-surface">
+          Possible duplicates before load
+        </h3>
+        <p className="mt-2 text-sm text-on-surface-variant">{groups.skippedReason}</p>
+      </div>
+    );
+  }
+  if (groups.groupCount === 0) {
+    return (
+      <div className="mb-8 rounded-xl border border-outline-variant bg-surface p-6 shadow-ambient">
+        <h3 className="text-xl font-semibold leading-7 text-on-surface">
+          Possible duplicates before load
+        </h3>
+        <p className="mt-2 text-sm text-on-surface-variant">
+          No likely KNA1 duplicates on name, city, or tax id
+          {groups.scannedRows ? ` in ${groups.scannedRows.toLocaleString()} scanned rows` : ""}.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-8 overflow-hidden rounded-xl border border-outline-variant bg-surface shadow-ambient">
+      <div className="border-b border-outline-variant p-4">
+        <h3 className="text-xl font-semibold leading-7 text-on-surface">
+          Possible duplicates before load
+        </h3>
+        <p className="mt-1 text-sm text-on-surface-variant">
+          These {groups.groupCount} groups look like they would create duplicate
+          customers in KNA1.
+        </p>
+      </div>
+      <div className="divide-y divide-outline-variant">
+        {groups.groups.map((group, index) => (
+          <div key={`${group.reason}-${index}`} className="px-4 py-3">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span
+                className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                  group.confidence === "high"
+                    ? "bg-error-container text-on-error-container"
+                    : "bg-tertiary-container/20 text-tertiary"
+                }`}
+              >
+                {group.confidence}
+              </span>
+              <span className="text-xs text-on-surface-variant">{group.reason}</span>
+            </div>
+            <ul className="space-y-1 font-mono text-xs text-on-surface">
+              {group.rows.map((row) => (
+                <li key={`${row.row}-${row.name}`}>
+                  Row {row.row}: {row.name || "—"}
+                  {row.city ? ` · ${row.city}` : ""}
+                  {row.taxId ? ` · ${row.taxId}` : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </div>
     </div>
   );

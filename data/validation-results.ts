@@ -18,6 +18,28 @@ export type ValidationException = {
   actionLabel: "Fix" | "View";
 };
 
+export type DuplicateGroupRow = {
+  row: number;
+  name: string;
+  city: string;
+  taxId: string;
+};
+
+export type DuplicateGroup = {
+  reason: string;
+  confidence: "high" | "likely" | string;
+  rows: DuplicateGroupRow[];
+};
+
+export type DuplicateGroupsPayload = {
+  scannedRows: number;
+  skippedReason?: string | null;
+  columns?: { name?: string | null; city?: string | null; taxId?: string | null };
+  groupCount: number;
+  rowCount: number;
+  groups: DuplicateGroup[];
+};
+
 export type ValidationResultSummary = {
   id: string;
   projectLabel: string;
@@ -35,6 +57,7 @@ export type ValidationResultSummary = {
   errorsByType: { label: string; value: number; color: string }[];
   errorsByField: { field: string; count: number }[];
   exceptions: ValidationException[];
+  duplicateGroups?: DuplicateGroupsPayload | null;
 };
 
 const sharedExceptions: ValidationException[] = [

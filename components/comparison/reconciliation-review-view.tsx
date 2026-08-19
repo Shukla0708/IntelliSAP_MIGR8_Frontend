@@ -116,7 +116,13 @@ function DiscrepancyRow({ row }: { row: ReconciliationDiscrepancy }) {
         {row.postloadValue}
       </td>
       <td className="px-4 py-3">
-        <span className="rounded bg-surface-container px-2 py-1 font-mono text-xs text-on-surface-variant">
+        <span
+          className={`rounded px-2 py-1 font-mono text-xs ${
+            row.differenceType === "SEMANTIC_MATCH"
+              ? "bg-primary/10 font-semibold text-primary"
+              : "bg-surface-container text-on-surface-variant"
+          }`}
+        >
           {row.differenceType}
         </span>
       </td>
@@ -223,9 +229,14 @@ export function ReconciliationReviewView({
         className="flex flex-col overflow-hidden rounded-[20px] border border-outline-variant bg-surface shadow-sm"
       >
         <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-outline-variant bg-surface/90 p-4 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-xl font-semibold leading-7 text-on-surface">
-            Discrepancy Details
-          </h3>
+          <div>
+            <h3 className="text-xl font-semibold leading-7 text-on-surface">
+              Discrepancy Details
+            </h3>
+            <p className="mt-1 text-xs text-on-surface-variant">
+              SEMANTIC_MATCH is a near-match (Inc vs Incorporated) — info, not a load failure.
+            </p>
+          </div>
           <span className="inline-flex items-center gap-1 rounded border border-outline-variant bg-surface-container px-2 py-1 font-mono text-xs text-on-surface-variant">
             <FilterListIcon className="h-3.5 w-3.5" />
             FILTER: Exceptions Only

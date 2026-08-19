@@ -266,3 +266,29 @@ export async function fetchSapTableFields(table: string): Promise<{
   }>("/api/mappings/sap-fields", { table: table.trim().toUpperCase() });
   return data;
 }
+
+export async function downloadLoadLayout(
+  mappingId: string,
+  format: "csv" | "xml",
+): Promise<void> {
+  const { data, headers } = await apiClient.get<Blob>(
+    `/api/mappings/${mappingId}/load-layout`,
+    {
+      params: { format, notes: true },
+      responseType: "blob",
+      timeout: 60_000,
+    },
+  );
+  const disposition = String(headers["content-disposition"] || "");
+  const filename =
+    disposition.match(/filename="([^"]+)"/)?.[1] ??
+    `load-layout.${format}`;
+  const url = URL.createObjectURL(data);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}

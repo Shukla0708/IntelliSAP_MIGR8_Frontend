@@ -16,30 +16,52 @@ function resolveChatContext(
   pathname: string,
   params: { id?: string },
   projectId?: string | null,
-): { page: ChatPage; run_id?: string; mapping_id?: string; project_id?: string } {
+): {
+  page: ChatPage;
+  run_id?: string;
+  mapping_id?: string;
+  comparison_id?: string;
+  project_id?: string;
+} {
   const id = typeof params.id === "string" ? params.id : undefined;
   if (pathname.startsWith("/validation_result/") && id) {
     return { page: "validation_result", run_id: id, project_id: projectId || undefined };
   }
-  if (
-    pathname.startsWith("/field-mapping/") &&
-    id &&
-    id !== "new"
-  ) {
+  if (pathname.startsWith("/field-mapping/") && id && id !== "new") {
     return { page: "mapping_result", mapping_id: id, project_id: projectId || undefined };
+  }
+  if (pathname.startsWith("/compare/") && id && id !== "new") {
+    return { page: "comparison_result", comparison_id: id, project_id: projectId || undefined };
   }
   if (pathname.startsWith("/report")) {
     return { page: "report", project_id: projectId || undefined };
   }
-  // Dashboard (and other global screens) — no project filter.
   return { page: "dashboard" };
 }
 
 function contextLabel(page: ChatPage): string {
   if (page === "validation_result") return "This validation run";
   if (page === "mapping_result") return "This mapping run";
+  if (page === "comparison_result") return "This comparison run";
   if (page === "report") return "This project report";
   return "All your projects";
+}
+
+function suggestedPrompts(page: ChatPage): string[] {
+  if (page === "validation_result") {
+    return ["Explain the top failures", "Find duplicate customers before load"];
+  }
+  if (page === "mapping_result") {
+    return ["Generate an LSMW load layout"];
+  }
+  if (page === "comparison_result") {
+    return ["Summarize last comparison"];
+  }
+  return [
+    "Suggest rules on this draft",
+    "Summarize last comparison",
+    "Find duplicate customers before load",
+  ];
 }
 
 export function ResultsChatDrawer() {
@@ -116,11 +138,25 @@ export function ResultsChatDrawer() {
 
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
             {turns.length === 0 ? (
-              <p className="text-sm leading-6 text-on-surface-variant">
-                Ask about any project — validation health, duplicate keys,
-                failing fields, or mapping confidence. On this screen I can
-                see all of your projects.
-              </p>
+              <div className="space-y-3">
+                <p className="text-sm leading-6 text-on-surface-variant">
+                  Ask about validation, mapping, comparison, or an allowed
+                  action — suggest rules, explain failures, or summarize the
+                  last reconciliation.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {suggestedPrompts(context.page).map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      onClick={() => setInput(prompt)}
+                      className="rounded-full border border-outline-variant px-3 py-1 text-xs text-on-surface-variant hover:bg-surface-container-high"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ) : null}
             {turns.map((turn, index) => (
               <div

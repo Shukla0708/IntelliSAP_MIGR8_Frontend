@@ -7,6 +7,7 @@ import {
   ArrowForwardIcon,
   AutoAwesomeIcon,
   CheckIcon,
+  DownloadIcon,
   FilterListIcon,
   HelpIcon,
   MailIcon,
@@ -26,6 +27,7 @@ import type {
 import { getApiErrorMessage } from "@/lib/axios";
 import {
   confirmMapping,
+  downloadLoadLayout,
   fetchMappingTargetFields,
   renameMappingRun,
   type ConfirmMappingField,
@@ -605,6 +607,8 @@ export function FieldMappingWorkspaceView({
   const [search, setSearch] = useState("");
   const [approving, setApproving] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
+  const [layoutError, setLayoutError] = useState<string | null>(null);
+  const [layoutBusy, setLayoutBusy] = useState<"csv" | "xml" | null>(null);
   const [runName, setRunName] = useState(workspace.runName);
   const [renameOpen, setRenameOpen] = useState(false);
   const [pickerRowId, setPickerRowId] = useState<string | null>(null);
@@ -628,6 +632,7 @@ export function FieldMappingWorkspaceView({
   const activeRow = rows.find((row) => row.id === activeRowId) ?? null;
 
   const hasUnmappedFields = rows.some((row) => !row.selectedProspectId);
+  const hasConfirmedFields = rows.some((row) => row.confirmed);
 
   const fieldsReadyToConfirm: ConfirmMappingField[] = rows.flatMap((row) => {
     const selectedProspect = row.prospects.find(
@@ -728,6 +733,20 @@ export function FieldMappingWorkspaceView({
     }
   }
 
+  async function handleDownloadLayout(format: "csv" | "xml") {
+    setLayoutError(null);
+    setLayoutBusy(format);
+    try {
+      await downloadLoadLayout(workspace.id, format);
+    } catch (err) {
+      setLayoutError(
+        getApiErrorMessage(err, "Could not generate the load layout. Approve the mapping first."),
+      );
+    } finally {
+      setLayoutBusy(null);
+    }
+  }
+
   const pickerRow = rows.find((row) => row.id === pickerRowId) ?? null;
 
   // Until the catalog arrives (or if it fails to load) the row's own candidates
@@ -786,6 +805,28 @@ export function FieldMappingWorkspaceView({
             </button>
             <Button
               type="button"
+              variant="ghost"
+              size="md"
+              disabled={!hasConfirmedFields || layoutBusy !== null}
+              onClick={() => void handleDownloadLayout("csv")}
+              className="h-auto gap-2 px-3 py-1.5 text-[13px] font-semibold uppercase tracking-[0.02em]"
+            >
+              <DownloadIcon className="h-4 w-4" />
+              {layoutBusy === "csv" ? "CSV…" : "Cockpit CSV"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="md"
+              disabled={!hasConfirmedFields || layoutBusy !== null}
+              onClick={() => void handleDownloadLayout("xml")}
+              className="h-auto gap-2 px-3 py-1.5 text-[13px] font-semibold uppercase tracking-[0.02em]"
+            >
+              <DownloadIcon className="h-4 w-4" />
+              {layoutBusy === "xml" ? "XML…" : "LSMW XML"}
+            </Button>
+            <Button
+              type="button"
               size="md"
               onClick={handleApprove}
               disabled={approving || hasUnmappedFields || rows.length === 0}
@@ -799,6 +840,11 @@ export function FieldMappingWorkspaceView({
         {approveError ? (
           <p className="border-b border-outline-variant bg-error-container/10 px-4 py-2 text-xs text-error" role="alert">
             {approveError}
+          </p>
+        ) : null}
+        {layoutError ? (
+          <p className="border-b border-outline-variant bg-error-container/10 px-4 py-2 text-xs text-error" role="alert">
+            {layoutError}
           </p>
         ) : null}
 
